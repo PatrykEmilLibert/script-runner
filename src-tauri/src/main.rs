@@ -3,7 +3,8 @@
     windows_subsystem = "windows"
 )]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::env;
 use tauri::State;
 
 mod kill_switch;
@@ -53,6 +54,13 @@ async fn get_script_logs(script_name: String, state: State<'_, AppState>) -> Res
         .map_err(|e| format!("Failed to read logs: {}", e))
 }
 
+#[tauri::command]
+fn check_admin_key() -> bool {
+    let default_path = "C:\\Users\\Public\\Desktop\\sr-admin.key".to_string();
+    let admin_path = env::var("ADMIN_KEY_PATH").unwrap_or(default_path);
+    Path::new(&admin_path).exists()
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -62,7 +70,8 @@ fn main() {
             list_scripts,
             get_script_logs,
             script_manager::add_script,
-            script_manager::get_local_scripts
+            script_manager::get_local_scripts,
+            check_admin_key
         ])
         .manage(AppState {
             scripts_dir: PathBuf::from("./scripts"),

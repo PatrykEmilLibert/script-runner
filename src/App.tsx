@@ -18,6 +18,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "logs">("dashboard");
   const [showAddScript, setShowAddScript] = useState(false);
   const [scriptsDir] = useState("P:\\python_runner_github\\script-runner-scripts");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const initApp = async () => {
@@ -28,6 +29,10 @@ export default function App() {
           setAppBlocked(true);
           return;
         }
+
+        // Check admin key
+        const admin: boolean = await invoke("check_admin_key");
+        setIsAdmin(admin);
 
         // Sync scripts from GitHub
         await invoke("sync_scripts");
@@ -136,7 +141,11 @@ export default function App() {
 
       <main className="app-main">
         {activeTab === "dashboard" && (
-          <Dashboard scripts={scripts} onAddScript={() => setShowAddScript(true)} />
+          <Dashboard
+            scripts={scripts}
+            onAddScript={() => isAdmin && setShowAddScript(true)}
+            isAdmin={isAdmin}
+          />
         )}
         {activeTab === "scripts" && (
           <div className="scripts-section">
