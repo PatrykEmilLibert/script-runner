@@ -10,6 +10,7 @@ mod kill_switch;
 mod git_manager;
 mod python_runner;
 mod dependency_manager;
+mod script_manager;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -59,7 +60,9 @@ fn main() {
             sync_scripts,
             run_script,
             list_scripts,
-            get_script_logs
+            get_script_logs,
+            script_manager::add_script,
+            script_manager::get_local_scripts
         ])
         .manage(AppState {
             scripts_dir: PathBuf::from("./scripts"),

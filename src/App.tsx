@@ -5,6 +5,7 @@ import Dashboard from "./components/Dashboard";
 import ScriptList from "./components/ScriptList";
 import ScriptExecutor from "./components/ScriptExecutor";
 import LogViewer from "./components/LogViewer";
+import { AddScript } from "./components/AddScript";
 import "./App.css";
 
 export default function App() {
@@ -15,6 +16,8 @@ export default function App() {
   const [output, setOutput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "logs">("dashboard");
+  const [showAddScript, setShowAddScript] = useState(false);
+  const [scriptsDir] = useState("P:\\python_runner_github\\script-runner-scripts");
 
   useEffect(() => {
     const initApp = async () => {
@@ -32,6 +35,9 @@ export default function App() {
         // List available scripts
         const scriptList: string[] = await invoke("list_scripts");
         setScripts(scriptList);
+        
+        // Load local scripts
+        await loadLocalScripts();
       } catch (error) {
         console.error("Initialization error:", error);
         // Check if it's a network error
@@ -45,6 +51,21 @@ export default function App() {
 
     initApp();
   }, []);
+
+  const loadLocalScripts = async () => {
+    try {
+      const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir });
+      console.log("Local scripts:", localScripts);
+    } catch (error) {
+      console.error("Failed to load local scripts:", error);
+    }
+  };
+
+  const handleScriptAdded = async () => {
+    await loadLocalScripts();
+    const scriptList: string[] = await invoke("list_scripts");
+    setScripts(scriptList);
+  };
 
   if (networkError) {
     return (
@@ -114,7 +135,9 @@ export default function App() {
       </nav>
 
       <main className="app-main">
-        {activeTab === "dashboard" && <Dashboard scripts={scripts} />}
+        {activeTab === "dashboard" && (
+          <Dashboard scripts={scripts} onAddScript={() => setShowAddScript(true)} />
+        )}
         {activeTab === "scripts" && (
           <div className="scripts-section">
             <ScriptList scripts={scripts} selected={selectedScript} onSelect={setSelectedScript} />
@@ -127,6 +150,14 @@ export default function App() {
           <LogViewer scriptName={selectedScript} />
         )}
       </main>
+
+      {showAddScript && (
+        <AddScript
+          onScriptAdded={handleScriptAdded}
+          onClose={() => setShowAddScript(false)}
+          scriptsDir={scriptsDir}
+        />
+      )}
 
       {output && (
         <motion.div

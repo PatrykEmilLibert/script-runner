@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { BarChart3, Zap, GitBranch } from "lucide-react";
+import { BarChart3, Zap, GitBranch, Plus } from "lucide-react";
 
 interface DashboardProps {
   scripts: string[];
+  onAddScript: () => void;
 }
 
-export default function Dashboard({ scripts }: DashboardProps) {
+export default function Dashboard({ scripts, onAddScript }: DashboardProps) {
   return (
     <motion.div className="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="dashboard-grid">
@@ -29,7 +30,16 @@ export default function Dashboard({ scripts }: DashboardProps) {
       </div>
 
       <motion.div className="recent-scripts" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
-        <h2>Available Scripts</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2>Available Scripts</h2>
+          <button
+            onClick={onAddScript}
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-4 py-2 rounded-lg font-medium transition-all"
+          >
+            <Plus size={20} />
+            Add Script
+          </button>
+        </div>
         <ul>
           {scripts.slice(0, 5).map((script) => (
             <li key={script}>
