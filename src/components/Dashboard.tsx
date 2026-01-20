@@ -5,16 +5,17 @@ interface DashboardProps {
   scripts: string[];
   onAddScript: () => void;
   isAdmin: boolean;
+  officialScripts: string[];
 }
 
-export default function Dashboard({ scripts, onAddScript, isAdmin }: DashboardProps) {
+export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts }: DashboardProps) {
   return (
     <motion.div className="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="dashboard-grid">
         <motion.div className="card" whileHover={{ scale: 1.05 }}>
           <BarChart3 className="card-icon" />
           <h3>Total Scripts</h3>
-          <p className="card-value">{scripts.length}</p>
+          <p className="card-value">{scripts.length + officialScripts.length}</p>
         </motion.div>
 
         <motion.div className="card" whileHover={{ scale: 1.05 }}>
@@ -32,7 +33,7 @@ export default function Dashboard({ scripts, onAddScript, isAdmin }: DashboardPr
 
       <motion.div className="recent-scripts" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
         <div className="flex justify-between items-center mb-4">
-          <h2>Available Scripts</h2>
+          <h2>Official Scripts</h2>
           {isAdmin && (
             <button
               onClick={onAddScript}
@@ -43,6 +44,16 @@ export default function Dashboard({ scripts, onAddScript, isAdmin }: DashboardPr
             </button>
           )}
         </div>
+        <ul>
+          {officialScripts.slice(0, 5).map((script) => (
+            <li key={script}>
+              <span className="script-icon">🔒</span>
+              {script}
+            </li>
+          ))}
+        </ul>
+
+        <h3 className="mt-6 mb-2">User Scripts</h3>
         <ul>
           {scripts.slice(0, 5).map((script) => (
             <li key={script}>

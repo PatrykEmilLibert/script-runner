@@ -6,6 +6,7 @@ import ScriptList from "./components/ScriptList";
 import ScriptExecutor from "./components/ScriptExecutor";
 import LogViewer from "./components/LogViewer";
 import { AddScript } from "./components/AddScript";
+import { AdminDropzone } from "./components/AdminDropzone";
 import "./App.css";
 
 export default function App() {
@@ -18,7 +19,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "logs">("dashboard");
   const [showAddScript, setShowAddScript] = useState(false);
   const [scriptsDir] = useState("P:\\python_runner_github\\script-runner-scripts");
+  const [officialDir] = useState("P:\\python_runner_github\\script-runner-scripts");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [officialScripts, setOfficialScripts] = useState<string[]>([]);
 
   useEffect(() => {
     const initApp = async () => {
@@ -43,6 +46,7 @@ export default function App() {
         
         // Load local scripts
         await loadLocalScripts();
+        await loadOfficialScripts();
       } catch (error) {
         console.error("Initialization error:", error);
         // Check if it's a network error
@@ -59,17 +63,30 @@ export default function App() {
 
   const loadLocalScripts = async () => {
     try {
-      const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir });
-      console.log("Local scripts:", localScripts);
+      const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir, subdir: "scripts" });
+      const names = localScripts.map((s: any) => s.name ?? "");
+      setScripts(names);
     } catch (error) {
       console.error("Failed to load local scripts:", error);
     }
   };
 
+  const loadOfficialScripts = async () => {
+    try {
+      const items: any[] = await invoke("get_local_scripts", { scriptsDir: officialDir, subdir: "official" });
+      const names = items.map((s: any) => s.name ?? "");
+      setOfficialScripts(names);
+    } catch (error) {
+      console.error("Failed to load official scripts:", error);
+    }
+  };
+
   const handleScriptAdded = async () => {
     await loadLocalScripts();
-    const scriptList: string[] = await invoke("list_scripts");
-    setScripts(scriptList);
+  };
+
+  const handleOfficialAdded = async () => {
+    await loadOfficialScripts();
   };
 
   if (networkError) {
@@ -143,12 +160,18 @@ export default function App() {
         {activeTab === "dashboard" && (
           <Dashboard
             scripts={scripts}
+            officialScripts={officialScripts}
             onAddScript={() => isAdmin && setShowAddScript(true)}
             isAdmin={isAdmin}
           />
         )}
         {activeTab === "scripts" && (
           <div className="scripts-section">
+            {isAdmin && (
+              <div className="mb-4">
+                <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
+              </div>
+            )}
             <ScriptList scripts={scripts} selected={selectedScript} onSelect={setSelectedScript} />
             {selectedScript && (
               <ScriptExecutor script={selectedScript} onOutput={setOutput} />

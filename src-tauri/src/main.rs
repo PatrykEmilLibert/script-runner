@@ -70,6 +70,7 @@ fn main() {
             list_scripts,
             get_script_logs,
             script_manager::add_script,
+            script_manager::add_official_script,
             script_manager::get_local_scripts,
             check_admin_key
         ])

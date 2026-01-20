@@ -22,49 +22,33 @@ pub async fn add_script(
     author: String,
     scripts_dir: String,
 ) -> Result<String, String> {
-    let scripts_path = Path::new(&scripts_dir);
-    
-    // Create script directory
-    let script_dir = scripts_path.join("scripts").join(&script_name);
-    fs::create_dir_all(&script_dir)
-        .map_err(|e| format!("Failed to create script directory: {}", e))?;
-    
-    // Save main.py
-    let script_file = script_dir.join("main.py");
-    fs::write(&script_file, &script_content)
-        .map_err(|e| format!("Failed to write script file: {}", e))?;
-    
-    // Analyze dependencies
-    let dependencies = analyze_dependencies(&script_content)?;
-    
-    // Save requirements.txt
-    if !dependencies.is_empty() {
-        let requirements_file = script_dir.join("requirements.txt");
-        fs::write(&requirements_file, dependencies.join("\n"))
-            .map_err(|e| format!("Failed to write requirements: {}", e))?;
-    }
-    
-    // Create metadata
-    let now = Utc::now().to_rfc3339();
-    let metadata = ScriptMetadata {
-        name: script_name.clone(),
+    add_script_internal(
+        script_name,
+        script_content,
         description,
         author,
-        version: "1.0.0".to_string(),
-        created_at: now.clone(),
-        last_modified: now,
-    };
-    
-    let metadata_file = script_dir.join("metadata.json");
-    let metadata_json = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
-    fs::write(&metadata_file, metadata_json)
-        .map_err(|e| format!("Failed to write metadata: {}", e))?;
-    
-    // Git commit and push
-    commit_and_push(&scripts_path, &script_name)?;
-    
-    Ok(format!("Script '{}' added successfully!", script_name))
+        scripts_dir,
+        "scripts",
+    )
+}
+
+#[tauri::command]
+pub async fn add_official_script(
+    file_name: String,
+    file_content: String,
+    description: String,
+    author: String,
+    scripts_dir: String,
+) -> Result<String, String> {
+    let script_name = file_name.trim_end_matches(".py").to_string();
+    add_script_internal(
+        script_name,
+        file_content,
+        description,
+        author,
+        scripts_dir,
+        "official",
+    )
 }
 
 fn analyze_dependencies(script_content: &str) -> Result<Vec<String>, String> {
@@ -157,8 +141,9 @@ fn commit_and_push(scripts_path: &Path, script_name: &str) -> Result<(), String>
 }
 
 #[tauri::command]
-pub fn get_local_scripts(scripts_dir: String) -> Result<Vec<ScriptMetadata>, String> {
-    let scripts_path = Path::new(&scripts_dir).join("scripts");
+pub fn get_local_scripts(scripts_dir: String, subdir: Option<String>) -> Result<Vec<ScriptMetadata>, String> {
+    let folder = subdir.unwrap_or_else(|| "scripts".to_string());
+    let scripts_path = Path::new(&scripts_dir).join(folder);
     
     if !scripts_path.exists() {
         return Ok(Vec::new());
@@ -183,4 +168,56 @@ pub fn get_local_scripts(scripts_dir: String) -> Result<Vec<ScriptMetadata>, Str
     }
     
     Ok(scripts)
+}
+
+fn add_script_internal(
+    script_name: String,
+    script_content: String,
+    description: String,
+    author: String,
+    scripts_dir: String,
+    subfolder: &str,
+) -> Result<String, String> {
+    let scripts_path = Path::new(&scripts_dir);
+    let script_dir = scripts_path.join(subfolder).join(&script_name);
+
+    fs::create_dir_all(&script_dir)
+        .map_err(|e| format!("Failed to create script directory: {}", e))?;
+
+    // Save main.py
+    let script_file = script_dir.join("main.py");
+    fs::write(&script_file, &script_content)
+        .map_err(|e| format!("Failed to write script file: {}", e))?;
+
+    // Analyze dependencies
+    let dependencies = analyze_dependencies(&script_content)?;
+
+    // Save requirements.txt
+    if !dependencies.is_empty() {
+        let requirements_file = script_dir.join("requirements.txt");
+        fs::write(&requirements_file, dependencies.join("\n"))
+            .map_err(|e| format!("Failed to write requirements: {}", e))?;
+    }
+
+    // Create metadata
+    let now = Utc::now().to_rfc3339();
+    let metadata = ScriptMetadata {
+        name: script_name.clone(),
+        description,
+        author,
+        version: "1.0.0".to_string(),
+        created_at: now.clone(),
+        last_modified: now,
+    };
+
+    let metadata_file = script_dir.join("metadata.json");
+    let metadata_json = serde_json::to_string_pretty(&metadata)
+        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+    fs::write(&metadata_file, metadata_json)
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+
+    // Git commit and push
+    commit_and_push(&scripts_path, &script_name)?;
+
+    Ok(format!("Script '{}' added successfully!", script_name))
 }
