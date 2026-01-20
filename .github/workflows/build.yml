@@ -1,41 +1,44 @@
-name: Build ScriptRunner
+name: Build and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: script-runner.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: ScriptRunner.app
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platform }}
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install dependencies
         run: npm install
-
-      - name: Build frontend
-        run: npm run build
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -43,7 +46,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Release ${{ github.ref_name }}
-          releaseBody: 'See the assets to download and install this version.'
-          releaseDraft: false
+          releaseName: 'ScriptRunner ${{ github.ref_name }}'
+          releaseBody: |
+            ## What's Changed
+            Auto-generated release from tag ${{ github.ref_name }}
+            
+            ### Downloads
+            - **Windows**: Use `.msi` or `-setup.exe` installer
+            - **macOS**: Use `.dmg` installer (Universal binary for Intel & Apple Silicon)
+            
+            ### Admin Features
+            Place `sr-admin.key` file on your Desktop to enable admin-only features.
+          releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}

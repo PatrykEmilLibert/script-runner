@@ -1,4 +1,4 @@
-name: Run Linting & Tests
+name: CI - Lint and Test
 
 on:
   push:
@@ -10,10 +10,10 @@ jobs:
   lint-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - run: npm install
       - run: npm run lint || echo "No linter configured"
       - run: npm run type-check || echo "No type checker configured"
@@ -21,7 +21,7 @@ jobs:
   lint-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --manifest-path=src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
@@ -29,20 +29,20 @@ jobs:
   test-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - run: npm install
       - run: npm run test || echo "No tests configured"
 
   build-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm install
       - run: npm run build
