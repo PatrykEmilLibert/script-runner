@@ -1,23 +1,110 @@
+use regex::Regex;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::Command;
-use std::collections::HashSet;
-use regex::Regex;
 
 const STDLIB_MODULES: &[&str] = &[
-    "sys", "os", "json", "re", "math", "random", "datetime", "time", "collections",
-    "itertools", "functools", "operator", "string", "io", "pathlib", "tempfile",
-    "glob", "fnmatch", "linecache", "shutil", "gzip", "bz2", "zipfile", "tarfile",
-    "csv", "configparser", "hashlib", "hmac", "secrets", "sqlite3", "pickle",
-    "copyreg", "shelve", "dbm", "marshal", "struct", "difflib", "textwrap",
-    "unicodedata", "stringprep", "readline", "rlcompleter", "ast", "symtable",
-    "typing", "pydoc", "argparse", "getopt", "logging", "getpass", "curses",
-    "platform", "errno", "ctypes", "threading", "multiprocessing", "asyncio",
-    "queue", "socket", "ssl", "select", "selectors", "asynchat", "asyncore",
-    "signal", "mmap", "urllib", "http", "ftplib", "poplib", "imaplib", "smtplib",
-    "uuid", "socketserver", "xmlrpc", "ipaddress", "webbrowser", "cgi", "cgitb",
-    "wsgiref", "html", "xml", "traceback", "gc", "inspect", "site", "user",
-    "distutils", "venv", "zipapp", "unittest", "doctest", "pdb", "profile",
-    "pstats", "trace", "timeit", "warnings", "email", "mailbox", "mimetypes",
+    "sys",
+    "os",
+    "json",
+    "re",
+    "math",
+    "random",
+    "datetime",
+    "time",
+    "collections",
+    "itertools",
+    "functools",
+    "operator",
+    "string",
+    "io",
+    "pathlib",
+    "tempfile",
+    "glob",
+    "fnmatch",
+    "linecache",
+    "shutil",
+    "gzip",
+    "bz2",
+    "zipfile",
+    "tarfile",
+    "csv",
+    "configparser",
+    "hashlib",
+    "hmac",
+    "secrets",
+    "sqlite3",
+    "pickle",
+    "copyreg",
+    "shelve",
+    "dbm",
+    "marshal",
+    "struct",
+    "difflib",
+    "textwrap",
+    "unicodedata",
+    "stringprep",
+    "readline",
+    "rlcompleter",
+    "ast",
+    "symtable",
+    "typing",
+    "pydoc",
+    "argparse",
+    "getopt",
+    "logging",
+    "getpass",
+    "curses",
+    "platform",
+    "errno",
+    "ctypes",
+    "threading",
+    "multiprocessing",
+    "asyncio",
+    "queue",
+    "socket",
+    "ssl",
+    "select",
+    "selectors",
+    "asynchat",
+    "asyncore",
+    "signal",
+    "mmap",
+    "urllib",
+    "http",
+    "ftplib",
+    "poplib",
+    "imaplib",
+    "smtplib",
+    "uuid",
+    "socketserver",
+    "xmlrpc",
+    "ipaddress",
+    "webbrowser",
+    "cgi",
+    "cgitb",
+    "wsgiref",
+    "html",
+    "xml",
+    "traceback",
+    "gc",
+    "inspect",
+    "site",
+    "user",
+    "distutils",
+    "venv",
+    "zipapp",
+    "unittest",
+    "doctest",
+    "pdb",
+    "profile",
+    "pstats",
+    "trace",
+    "timeit",
+    "warnings",
+    "email",
+    "mailbox",
+    "mimetypes",
 ];
 
 pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, String> {
@@ -36,7 +123,8 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
         }
 
         if let Some(caps) = import_re.captures(trimmed) {
-            let module = caps.get(1)
+            let module = caps
+                .get(1)
                 .or_else(|| caps.get(2))
                 .map(|m| m.as_str())
                 .unwrap_or("");
@@ -66,7 +154,10 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     Ok(imports.into_iter().collect())
 }
 
-pub async fn install_dependencies(packages: &[String], python_exec: &PathBuf) -> Result<(), String> {
+pub async fn install_dependencies(
+    packages: &[String],
+    python_exec: &PathBuf,
+) -> Result<(), String> {
     if packages.is_empty() {
         return Ok(());
     }

@@ -1,9 +1,12 @@
-use std::path::PathBuf;
-use std::process::Command;
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
+use std::process::Command;
 
-pub async fn execute_script(script_path: &PathBuf, python_exec: &PathBuf) -> Result<String, String> {
+pub async fn execute_script(
+    script_path: &PathBuf,
+    python_exec: &PathBuf,
+) -> Result<String, String> {
     let output = Command::new(python_exec)
         .arg(script_path)
         .output()
@@ -14,11 +17,22 @@ pub async fn execute_script(script_path: &PathBuf, python_exec: &PathBuf) -> Res
 
     // Save logs
     if let Some(script_name) = script_path.file_stem() {
-        let log_path = script_path.parent().unwrap().join(format!("{}.log", script_name.to_string_lossy()));
+        let log_path = script_path
+            .parent()
+            .unwrap()
+            .join(format!("{}.log", script_name.to_string_lossy()));
         if let Ok(mut file) = File::create(&log_path) {
             let _ = writeln!(file, "=== Script Output ===\n{}\n", stdout);
             let _ = writeln!(file, "=== Errors ===\n{}\n", stderr);
-            let _ = writeln!(file, "=== Status ===\n{}\n", if output.status.success() { "Success" } else { "Failed" });
+            let _ = writeln!(
+                file,
+                "=== Status ===\n{}\n",
+                if output.status.success() {
+                    "Success"
+                } else {
+                    "Failed"
+                }
+            );
         }
     }
 

@@ -10,19 +10,21 @@ pub async fn check_remote_status() -> Result<bool, String> {
         .send()
         .await
         .map_err(|e| format!("No internet connection. Application requires network access: {}", e))?;
-    
-    let text = response.text().await
+
+    let text = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
-    
+
     let data = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("Failed to parse kill switch data: {}", e))?;
-    
+
     let is_blocked = data["blocked"].as_bool().unwrap_or(false);
-    
+
     if is_blocked {
         log::error!("Application has been remotely blocked!");
         return Ok(true);
     }
-    
+
     Ok(false)
 }

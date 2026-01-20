@@ -1,7 +1,7 @@
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use chrono::Utc;
 use std::process::Command;
 
 #[derive(Serialize, Deserialize)]
@@ -53,11 +53,11 @@ pub async fn add_official_script(
 
 fn analyze_dependencies(script_content: &str) -> Result<Vec<String>, String> {
     let mut dependencies = Vec::new();
-    
+
     // Parse import statements
     for line in script_content.lines() {
         let trimmed = line.trim();
-        
+
         if trimmed.starts_with("import ") {
             let parts: Vec<&str> = trimmed.split_whitespace().collect();
             if parts.len() >= 2 {
@@ -76,25 +76,57 @@ fn analyze_dependencies(script_content: &str) -> Result<Vec<String>, String> {
             }
         }
     }
-    
+
     // Remove duplicates
     dependencies.sort();
     dependencies.dedup();
-    
+
     Ok(dependencies)
 }
 
 fn is_stdlib_module(module: &str) -> bool {
     // Common Python stdlib modules
     let stdlib_modules = [
-        "os", "sys", "re", "json", "time", "datetime", "random", "math",
-        "collections", "itertools", "functools", "pathlib", "typing",
-        "logging", "argparse", "subprocess", "threading", "multiprocessing",
-        "socket", "urllib", "http", "email", "csv", "sqlite3", "pickle",
-        "hashlib", "hmac", "secrets", "uuid", "base64", "io", "shutil",
-        "tempfile", "glob", "fnmatch", "zipfile", "tarfile", "gzip",
+        "os",
+        "sys",
+        "re",
+        "json",
+        "time",
+        "datetime",
+        "random",
+        "math",
+        "collections",
+        "itertools",
+        "functools",
+        "pathlib",
+        "typing",
+        "logging",
+        "argparse",
+        "subprocess",
+        "threading",
+        "multiprocessing",
+        "socket",
+        "urllib",
+        "http",
+        "email",
+        "csv",
+        "sqlite3",
+        "pickle",
+        "hashlib",
+        "hmac",
+        "secrets",
+        "uuid",
+        "base64",
+        "io",
+        "shutil",
+        "tempfile",
+        "glob",
+        "fnmatch",
+        "zipfile",
+        "tarfile",
+        "gzip",
     ];
-    
+
     stdlib_modules.contains(&module)
 }
 
@@ -105,11 +137,14 @@ fn commit_and_push(scripts_path: &Path, script_name: &str) -> Result<(), String>
         .current_dir(scripts_path)
         .output()
         .map_err(|e| format!("Git add failed: {}", e))?;
-    
+
     if !add_output.status.success() {
-        return Err(format!("Git add failed: {}", String::from_utf8_lossy(&add_output.stderr)));
+        return Err(format!(
+            "Git add failed: {}",
+            String::from_utf8_lossy(&add_output.stderr)
+        ));
     }
-    
+
     // Git commit
     let commit_msg = format!("Add script: {}", script_name);
     let commit_output = Command::new("git")
@@ -117,7 +152,7 @@ fn commit_and_push(scripts_path: &Path, script_name: &str) -> Result<(), String>
         .current_dir(scripts_path)
         .output()
         .map_err(|e| format!("Git commit failed: {}", e))?;
-    
+
     if !commit_output.status.success() {
         let stderr = String::from_utf8_lossy(&commit_output.stderr);
         // Ignore "nothing to commit" errors
@@ -125,39 +160,45 @@ fn commit_and_push(scripts_path: &Path, script_name: &str) -> Result<(), String>
             return Err(format!("Git commit failed: {}", stderr));
         }
     }
-    
+
     // Git push
     let push_output = Command::new("git")
         .args(&["push"])
         .current_dir(scripts_path)
         .output()
         .map_err(|e| format!("Git push failed: {}", e))?;
-    
+
     if !push_output.status.success() {
-        return Err(format!("Git push failed: {}", String::from_utf8_lossy(&push_output.stderr)));
+        return Err(format!(
+            "Git push failed: {}",
+            String::from_utf8_lossy(&push_output.stderr)
+        ));
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_local_scripts(scripts_dir: String, subdir: Option<String>) -> Result<Vec<ScriptMetadata>, String> {
+pub fn get_local_scripts(
+    scripts_dir: String,
+    subdir: Option<String>,
+) -> Result<Vec<ScriptMetadata>, String> {
     let folder = subdir.unwrap_or_else(|| "scripts".to_string());
     let scripts_path = Path::new(&scripts_dir).join(folder);
-    
+
     if !scripts_path.exists() {
         return Ok(Vec::new());
     }
-    
+
     let mut scripts = Vec::new();
-    
+
     let entries = fs::read_dir(&scripts_path)
         .map_err(|e| format!("Failed to read scripts directory: {}", e))?;
-    
+
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let metadata_file = entry.path().join("metadata.json");
-        
+
         if metadata_file.exists() {
             let metadata_content = fs::read_to_string(&metadata_file)
                 .map_err(|e| format!("Failed to read metadata: {}", e))?;
@@ -166,7 +207,7 @@ pub fn get_local_scripts(scripts_dir: String, subdir: Option<String>) -> Result<
             scripts.push(metadata);
         }
     }
-    
+
     Ok(scripts)
 }
 
