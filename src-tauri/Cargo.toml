@@ -18,6 +18,7 @@ walkdir = "2.4"
 chrono = "0.4"
 dotenv = "0.15"
 log = "0.4"
+dirs = "5"
 
 [[bin]]
 name = "script-runner"

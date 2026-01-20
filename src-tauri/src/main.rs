@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::env;
+use dirs;
 use tauri::State;
 
 mod kill_switch;
@@ -56,9 +57,28 @@ async fn get_script_logs(script_name: String, state: State<'_, AppState>) -> Res
 
 #[tauri::command]
 fn check_admin_key() -> bool {
-    let default_path = "C:\\Users\\Public\\Desktop\\sr-admin.key".to_string();
-    let admin_path = env::var("ADMIN_KEY_PATH").unwrap_or(default_path);
-    Path::new(&admin_path).exists()
+    // Resolve admin key path with env override and cross-platform Desktop detection
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(custom) = env::var("ADMIN_KEY_PATH") {
+        candidates.push(PathBuf::from(custom));
+    }
+
+    if let Some(desktop) = dirs::desktop_dir() {
+        candidates.push(desktop.join("sr-admin.key"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        candidates.push(PathBuf::from("/tmp/sr-admin.key"));
+    }
+
+    candidates.into_iter().any(|p| Path::new(&p).exists())
 }
 
 fn main() {
