@@ -103,8 +103,8 @@ This creates:
 Create `.env` in project root:
 
 ```
-SCRIPTS_REPO_URL=https://github.com/YOUR_USERNAME/python-scripts
-KILL_SWITCH_REPO=https://github.com/YOUR_USERNAME/script-runner-config
+SCRIPTS_REPO_URL=https://github.com/PatrykEmilLibert/python-scripts
+KILL_SWITCH_REPO=https://github.com/PatrykEmilLibert/script-runner-config
 ```
 
 ### Kill Switch Setup

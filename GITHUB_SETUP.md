@@ -30,8 +30,8 @@ git commit -m "Initial commit: ScriptRunner - Python Script Executor with Tauri 
 ### B. Połącz lokalne repo z GitHub:
 
 ```bash
-# Zastąp YOUR_USERNAME swoją nazwą użytkownika GitHub
-git remote add origin https://github.com/YOUR_USERNAME/script-runner.git
+# URL Twojego repo
+git remote add origin https://github.com/PatrykEmilLibert/script-runner.git
 
 # Rename branch to main (jeśli trzeba)
 git branch -M main
@@ -97,8 +97,8 @@ cd P:\python_runner_github\script-runner
 
 # Stwórz .env
 @"
-SCRIPTS_REPO_URL=https://github.com/YOUR_USERNAME/python-scripts
-KILL_SWITCH_REPO=YOUR_USERNAME/script-runner-config
+SCRIPTS_REPO_URL=https://github.com/PatrykEmilLibert/python-scripts
+KILL_SWITCH_REPO=PatrykEmilLibert/script-runner-config
 GITHUB_TOKEN=ghp_YourPersonalAccessTokenHere
 "@ | Out-File -FilePath .env -Encoding UTF8
 ```
@@ -109,10 +109,10 @@ Otwórz `src-tauri/src/kill_switch.rs` i zmień URL:
 
 ```rust
 // Linia ~10
-.get("https://api.github.com/repos/YOUR_USERNAME/script-runner-config/contents/kill_switch.json")
+.get("https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json")
 ```
 
-Zamień `YOUR_USERNAME` na swoją nazwę użytkownika GitHub.
+URL już zaktualizowany dla Twojego konta.
 
 ## Krok 6: GitHub Actions Secrets
 
@@ -153,7 +153,7 @@ git add .
 git commit -m "Initial scripts"
 
 # Stwórz repo na GitHub i push
-git remote add origin https://github.com/YOUR_USERNAME/python-scripts.git
+git remote add origin https://github.com/PatrykEmilLibert/python-scripts.git
 git push -u origin main
 ```
 
@@ -253,7 +253,7 @@ git config --global commit.gpgsign true
 
 ```bash
 # Clone repo
-git clone https://github.com/YOUR_USERNAME/script-runner.git
+git clone https://github.com/PatrykEmilLibert/script-runner.git
 cd script-runner
 
 # Setup
@@ -273,7 +273,7 @@ git push origin feature/new-feature
 ### Dla użytkowników końcowych:
 
 ```
-1. Idź do: https://github.com/YOUR_USERNAME/script-runner/releases
+1. Idź do: https://github.com/PatrykEmilLibert/script-runner/releases
 2. Pobierz najnowszy .exe (Windows) lub .dmg (Mac)
 3. Zainstaluj
 4. Aplikacja automatycznie sprawdzi kill switch i sync scripts
@@ -293,7 +293,7 @@ git push -u origin main
 # 2. Stwórz kill switch repo (przez GitHub.com)
 # 3. Clone i dodaj kill_switch.json
 cd ..
-git clone https://github.com/YOUR_USERNAME/script-runner-config.git
+git clone https://github.com/PatrykEmilLibert/script-runner-config.git
 cd script-runner-config
 echo '{"blocked": false}' > kill_switch.json
 git add . && git commit -m "Add kill switch" && git push
@@ -327,7 +327,7 @@ git config --global credential.helper manager-core
 1. Sprawdź czy repo `script-runner-config` jest **private**
 2. Sprawdź URL w `kill_switch.rs`
 3. Sprawdź format JSON: `{"blocked": false}` (bez spacji)
-4. Test: `curl https://api.github.com/repos/YOUR_USERNAME/script-runner-config/contents/kill_switch.json`
+4. Test: `curl https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json`
 
 ### "GitHub Actions build fails"
 

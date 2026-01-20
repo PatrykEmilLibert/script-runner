@@ -12,7 +12,7 @@
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/YOUR_USERNAME/script-runner.git
+git clone https://github.com/PatrykEmilLibert/script-runner.git
 cd script-runner
 ```
 

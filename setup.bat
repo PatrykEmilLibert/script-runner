@@ -52,8 +52,8 @@ echo.
 if not exist .env (
     echo Creating .env file...
     (
-        echo SCRIPTS_REPO_URL=https://github.com/YOUR_USERNAME/python-scripts
-        echo KILL_SWITCH_REPO=https://github.com/YOUR_USERNAME/script-runner-config
+        echo SCRIPTS_REPO_URL=https://github.com/PatrykEmilLibert/python-scripts
+        echo KILL_SWITCH_REPO=https://github.com/PatrykEmilLibert/script-runner-config
     ) > .env
     echo [OK] .env created
 )

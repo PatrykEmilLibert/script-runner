@@ -4,7 +4,7 @@ pub async fn check_remote_status() -> Result<bool, String> {
     // Require internet connection - no offline mode
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/YOUR_USERNAME/script-runner-config/contents/kill_switch.json")
+        .get("https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json")
         .header("Accept", "application/vnd.github.v3.raw")
         .timeout(std::time::Duration::from_secs(10))
         .send()

@@ -17,7 +17,7 @@ We love your input! We want to make contributing to ScriptRunner as easy and tra
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/script-runner.git
+git clone https://github.com/PatrykEmilLibert/script-runner.git
 cd script-runner
 
 # Install dependencies
