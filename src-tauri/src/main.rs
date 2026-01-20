@@ -90,7 +90,7 @@ async fn get_script_logs(
 }
 
 #[tauri::command]
-fn check_admin_key() -> bool {
+fn check_admin_key() -> Result<bool, String> {
     // Resolve admin key path with env override and cross-platform Desktop detection
     let mut candidates: Vec<PathBuf> = Vec::new();
 
@@ -112,9 +112,12 @@ fn check_admin_key() -> bool {
         candidates.push(PathBuf::from("/tmp/sr-admin.key"));
     }
 
-    candidates
+    let is_valid = candidates
         .into_iter()
-        .any(|p| admin_key::validate_key_file(&p))
+        .any(|p| admin_key::validate_key_file(&p));
+
+    log::info!("Admin key check: {}", is_valid);
+    Ok(is_valid)
 }
 
 #[tauri::command]
@@ -122,6 +125,42 @@ fn generate_admin_key() -> Result<String, String> {
     let path = admin_key::desktop_key_path();
     let payload = admin_key::write_key_file(&path)?;
     Ok(format!("{}", path.to_string_lossy()))
+}
+
+#[tauri::command]
+fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(custom) = env::var("ADMIN_KEY_PATH") {
+        candidates.push(PathBuf::from(custom));
+    }
+
+    if let Some(desktop) = dirs::desktop_dir() {
+        candidates.push(desktop.join("sr-admin.key"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        candidates.push(PathBuf::from("/tmp/sr-admin.key"));
+    }
+
+    let info: Vec<serde_json::json::Value> = candidates
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "path": p.to_string_lossy().to_string(),
+                "exists": p.exists(),
+                "valid": admin_key::validate_key_file(&p),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({ "candidates": info }))
 }
 
 fn main() {
@@ -137,8 +176,26 @@ fn main() {
             script_manager::get_local_scripts,
             update_all_dependencies,
             check_admin_key,
-            generate_admin_key
+            generate_admin_key,
+            get_admin_key_info
         ])
+        .setup(|_app| {
+            #[cfg(debug_assertions)]
+            {
+                env_logger::builder()
+                    .filter_level(log::LevelFilter::Debug)
+                    .try_init()
+                    .ok();
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                env_logger::builder()
+                    .filter_level(log::LevelFilter::Info)
+                    .try_init()
+                    .ok();
+            }
+            Ok(())
+        })
         .manage(AppState {
             scripts_dir: PathBuf::from("./scripts"),
             python_exec: resolve_python_exec(),

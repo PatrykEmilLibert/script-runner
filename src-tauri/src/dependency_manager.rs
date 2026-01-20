@@ -1,7 +1,10 @@
 use regex::Regex;
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::collections::{hash_map::DefaultHasher, BTreeSet, HashSet};
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use walkdir::WalkDir;
 
 const STDLIB_MODULES: &[&str] = &[
     "sys",
@@ -152,6 +155,172 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     }
 
     Ok(imports.into_iter().collect())
+}
+
+fn hash_file(path: &Path) -> Result<u64, String> {
+    let data = fs::read(path).map_err(|e| format!("Failed to read file for hashing: {}", e))?;
+    let mut hasher = DefaultHasher::new();
+    data.hash(&mut hasher);
+    Ok(hasher.finish())
+}
+
+pub async fn ensure_requirements(
+    script_dir: &PathBuf,
+    python_exec: &PathBuf,
+) -> Result<(), String> {
+    let req_path = script_dir.join("requirements.txt");
+    if !req_path.exists() {
+        return Ok(());
+    }
+
+    let cache_path = script_dir.join(".deps-installed");
+    let current_hash = hash_file(&req_path)?;
+
+    // Skip install if hash matches cached
+    if cache_path.exists() {
+        if let Ok(cache_str) = fs::read_to_string(&cache_path) {
+            if let Ok(saved_hash) = cache_str.trim().parse::<u64>() {
+                if saved_hash == current_hash {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    let output = Command::new(python_exec)
+        .args(&["-m", "pip", "install", "-r", "requirements.txt"])
+        .current_dir(script_dir)
+        .output()
+        .map_err(|e| format!("Failed to run pip: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Pip install failed: {}", stderr));
+    }
+
+    // Cache hash to avoid reinstalling unchanged deps
+    if let Err(e) = fs::write(&cache_path, current_hash.to_string()) {
+        eprintln!("Failed to write deps cache: {}", e);
+    }
+
+    Ok(())
+}
+
+pub async fn ensure_all_scripts_requirements(
+    scripts_root: &PathBuf,
+    python_exec: &PathBuf,
+) -> Result<(), String> {
+    if !scripts_root.exists() {
+        return Ok(());
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut aggregated: BTreeSet<String> = BTreeSet::new();
+
+    // Find every folder containing main.py (handles scripts/ and official/)
+    for entry in WalkDir::new(scripts_root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_dir())
+    {
+        let dir = entry.path();
+        let main_py = dir.join("main.py");
+        if !main_py.exists() {
+            continue;
+        }
+
+        let req_path = dir.join("requirements.txt");
+
+        if req_path.exists() {
+            match fs::read_to_string(&req_path) {
+                Ok(content) => {
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() || trimmed.starts_with('#') {
+                            continue;
+                        }
+                        aggregated.insert(trimmed.to_string());
+                    }
+                }
+                Err(e) => errors.push(format!(
+                    "{}: failed to read requirements: {}",
+                    dir.display(),
+                    e
+                )),
+            }
+        } else {
+            match detect_dependencies(&main_py).await {
+                Ok(deps) => {
+                    for dep in &deps {
+                        aggregated.insert(dep.to_string());
+                    }
+                    if !deps.is_empty() {
+                        if let Err(e) = fs::write(&req_path, deps.join("\n")) {
+                            errors.push(format!(
+                                "{}: failed to persist generated requirements: {}",
+                                dir.display(),
+                                e
+                            ));
+                        }
+                    }
+                }
+                Err(e) => errors.push(format!("{}: failed to detect deps: {}", dir.display(), e)),
+            }
+        }
+    }
+
+    // Nothing to install
+    if aggregated.is_empty() {
+        return if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("Dependency install issues:\n{}", errors.join("\n")))
+        };
+    }
+
+    let combined: Vec<String> = aggregated.into_iter().collect();
+    let mut hasher = DefaultHasher::new();
+    combined.hash(&mut hasher);
+    let combined_hash = hasher.finish();
+    let cache_path = scripts_root.join(".deps-installed-all");
+
+    if cache_path.exists() {
+        if let Ok(cache_str) = fs::read_to_string(&cache_path) {
+            if let Ok(saved_hash) = cache_str.trim().parse::<u64>() {
+                if saved_hash == combined_hash {
+                    return if errors.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(format!("Dependency install issues:\n{}", errors.join("\n")))
+                    };
+                }
+            }
+        }
+    }
+
+    let output = Command::new(python_exec)
+        .args(&["-m", "pip", "install"])
+        .args(&combined)
+        .output()
+        .map_err(|e| format!("Failed to run pip: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Pip install failed: {}", stderr));
+    }
+
+    if let Err(e) = fs::write(&cache_path, combined_hash.to_string()) {
+        eprintln!("Failed to write global deps cache: {}", e);
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Dependency install issues (install succeeded but some scripts reported issues):\n{}",
+            errors.join("\n")
+        ))
+    }
 }
 
 pub async fn install_dependencies(

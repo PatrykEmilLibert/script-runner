@@ -34,8 +34,14 @@ export default function App() {
         }
 
         // Check admin key
-        const admin: boolean = await invoke("check_admin_key");
-        setIsAdmin(admin);
+        try {
+          const admin: boolean = await invoke("check_admin_key");
+          setIsAdmin(admin);
+          console.log("Admin check result:", admin);
+        } catch (adminError) {
+          console.error("Admin key check error:", adminError);
+          setIsAdmin(false);
+        }
 
         // Sync scripts from GitHub
         await invoke("sync_scripts");
