@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,15 +13,57 @@ pub struct AdminKeyFile {
 }
 
 pub fn desktop_key_path() -> PathBuf {
+    // 1. Check env override first
+    if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
+        return PathBuf::from(custom);
+    }
+
+    // 2. Try dirs crate (most reliable on normal systems)
     if let Some(desktop) = dirs::desktop_dir() {
         return desktop.join("sr-admin.key");
     }
+
+    // 3. Windows: try USERPROFILE\Desktop
     #[cfg(target_os = "windows")]
     {
-        PathBuf::from("C:/Users/Public/Desktop/sr-admin.key")
+        if let Ok(userprofile) = env::var("USERPROFILE") {
+            let path = PathBuf::from(userprofile)
+                .join("Desktop")
+                .join("sr-admin.key");
+            if path.parent().map_or(false, |p| p.exists()) {
+                return path;
+            }
+        }
+
+        // Fallback: common Windows paths
+        let common_paths = vec![
+            PathBuf::from("C:\\Users\\Public\\Desktop\\sr-admin.key"),
+            PathBuf::from("~/Desktop/sr-admin.key"),
+        ];
+        for path in common_paths {
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    return path;
+                }
+            }
+        }
+
+        // Last resort: Program Files or AppData
+        if let Ok(appdata) = env::var("APPDATA") {
+            return PathBuf::from(appdata)
+                .join("script-runner")
+                .join("sr-admin.key");
+        }
+
+        PathBuf::from("C:\\sr-admin.key")
     }
+
+    // 4. macOS/Linux: try common paths
     #[cfg(not(target_os = "windows"))]
     {
+        if let Ok(home) = env::var("HOME") {
+            return PathBuf::from(home).join("Desktop").join("sr-admin.key");
+        }
         PathBuf::from("/tmp/sr-admin.key")
     }
 }

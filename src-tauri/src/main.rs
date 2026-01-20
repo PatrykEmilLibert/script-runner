@@ -94,7 +94,7 @@ fn check_admin_key() -> Result<bool, String> {
     // Resolve admin key path with env override and cross-platform Desktop detection
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Ok(custom) = env::var("ADMIN_KEY_PATH") {
+    if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
         candidates.push(PathBuf::from(custom));
     }
 
@@ -104,17 +104,32 @@ fn check_admin_key() -> Result<bool, String> {
 
     #[cfg(target_os = "windows")]
     {
+        if let Ok(userprofile) = env::var("USERPROFILE") {
+            candidates.push(
+                PathBuf::from(userprofile)
+                    .join("Desktop")
+                    .join("sr-admin.key"),
+            );
+        }
         candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
+        if let Ok(appdata) = env::var("APPDATA") {
+            candidates.push(
+                PathBuf::from(appdata)
+                    .join("script-runner")
+                    .join("sr-admin.key"),
+            );
+        }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        if let Ok(home) = env::var("HOME") {
+            candidates.push(PathBuf::from(home).join("Desktop").join("sr-admin.key"));
+        }
         candidates.push(PathBuf::from("/tmp/sr-admin.key"));
     }
 
-    let is_valid = candidates
-        .into_iter()
-        .any(|p| admin_key::validate_key_file(&p));
+    let is_valid = candidates.iter().any(|p| admin_key::validate_key_file(p));
 
     log::info!("Admin key check: {}", is_valid);
     Ok(is_valid)
@@ -131,7 +146,7 @@ fn generate_admin_key() -> Result<String, String> {
 fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Ok(custom) = env::var("ADMIN_KEY_PATH") {
+    if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
         candidates.push(PathBuf::from(custom));
     }
 
@@ -141,11 +156,28 @@ fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
 
     #[cfg(target_os = "windows")]
     {
+        if let Ok(userprofile) = env::var("USERPROFILE") {
+            candidates.push(
+                PathBuf::from(userprofile)
+                    .join("Desktop")
+                    .join("sr-admin.key"),
+            );
+        }
         candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
+        if let Ok(appdata) = env::var("APPDATA") {
+            candidates.push(
+                PathBuf::from(appdata)
+                    .join("script-runner")
+                    .join("sr-admin.key"),
+            );
+        }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        if let Ok(home) = env::var("HOME") {
+            candidates.push(PathBuf::from(home).join("Desktop").join("sr-admin.key"));
+        }
         candidates.push(PathBuf::from("/tmp/sr-admin.key"));
     }
 
