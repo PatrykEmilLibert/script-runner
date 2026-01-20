@@ -15,7 +15,7 @@ chmod +x build.sh
 
 ## Output
 The macOS app bundle will be created at:
-- `src-tauri/target/release/bundle/dmg/ScriptRunner_0.1.0_x64.dmg`
+- `src-tauri/target/release/bundle/dmg/ScriptRunner_*.dmg`
 - `src-tauri/target/release/bundle/macos/ScriptRunner.app`
 
 ## Running

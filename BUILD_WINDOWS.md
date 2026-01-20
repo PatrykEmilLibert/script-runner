@@ -14,8 +14,8 @@ build.bat
 
 ## Output Files
 The Windows installers are created at:
-- **MSI Installer**: `src-tauri/target/release/bundle/msi/ScriptRunner_0.1.0_x64_en-US.msi`
-- **NSIS Installer**: `src-tauri/target/release/bundle/nsis/ScriptRunner_0.1.0_x64-setup.exe`
+- **MSI Installer**: `src-tauri/target/release/bundle/msi/ScriptRunner_*.msi`
+- **NSIS Installer**: `src-tauri/target/release/bundle/nsis/ScriptRunner_*_x64-setup.exe`
 
 ## Running
 Double-click either installer to install the application.
