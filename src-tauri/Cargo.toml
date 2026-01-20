@@ -19,6 +19,7 @@ chrono = "0.4"
 dotenv = "0.15"
 log = "0.4"
 dirs = "5"
+rand = "0.8"
 
 [[bin]]
 name = "script-runner"

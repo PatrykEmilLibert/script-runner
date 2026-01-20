@@ -8,6 +8,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+mod admin_key;
 mod dependency_manager;
 mod git_manager;
 mod kill_switch;
@@ -80,7 +81,16 @@ fn check_admin_key() -> bool {
         candidates.push(PathBuf::from("/tmp/sr-admin.key"));
     }
 
-    candidates.into_iter().any(|p| Path::new(&p).exists())
+    candidates
+        .into_iter()
+        .any(|p| admin_key::validate_key_file(&p))
+}
+
+#[tauri::command]
+fn generate_admin_key() -> Result<String, String> {
+    let path = admin_key::desktop_key_path();
+    let payload = admin_key::write_key_file(&path)?;
+    Ok(format!("{}", path.to_string_lossy()))
 }
 
 fn main() {
@@ -94,7 +104,8 @@ fn main() {
             script_manager::add_script,
             script_manager::add_official_script,
             script_manager::get_local_scripts,
-            check_admin_key
+            check_admin_key,
+            generate_admin_key
         ])
         .manage(AppState {
             scripts_dir: PathBuf::from("./scripts"),
