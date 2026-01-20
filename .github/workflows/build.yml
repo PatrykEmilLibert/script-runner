@@ -28,6 +28,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.9'
+
+      - name: Create Python venv and install dependencies
+        run: |
+          py -3.12 -m venv python
+          python\Scripts\python.exe -m pip install --upgrade pip
+          python\Scripts\python.exe -m pip install -r scripts/requirements.txt
+
       - name: Install dependencies
         run: npm install
 
@@ -58,6 +69,17 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.9'
+
+      - name: Create Python venv and install dependencies
+        run: |
+          python3.12 -m venv python
+          ./python/bin/python -m pip install --upgrade pip
+          ./python/bin/python -m pip install -r scripts/requirements.txt
 
       - name: Install dependencies
         run: npm install

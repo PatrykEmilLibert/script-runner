@@ -21,26 +21,57 @@ pub struct AppState {
     python_exec: PathBuf,
 }
 
+fn resolve_python_exec() -> PathBuf {
+    if let Ok(custom) = env::var("PYTHON_EXEC") {
+        return PathBuf::from(custom);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from("./python/Scripts/python.exe")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        PathBuf::from("./python/bin/python")
+    }
+}
+
 #[tauri::command]
 async fn check_kill_switch() -> Result<bool, String> {
     kill_switch::check_remote_status().await
 }
 
 #[tauri::command]
-fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
-    git_manager::sync_scripts(&state.scripts_dir)
+async fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
+    let res = git_manager::sync_scripts(&state.scripts_dir)?;
+    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec)
+        .await?;
+    Ok(res)
 }
 
 #[tauri::command]
 async fn run_script(script_name: String, state: State<'_, AppState>) -> Result<String, String> {
-    let script_path = state.scripts_dir.join(&script_name);
+    let script_dir = state.scripts_dir.join(&script_name);
+    let main_py = script_dir.join("main.py");
 
-    // Auto-detect dependencies
-    let deps = dependency_manager::detect_dependencies(&script_path).await?;
-    dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
+    // Install deps from requirements.txt if present (cached by hash)
+    dependency_manager::ensure_requirements(&script_dir, &state.python_exec).await?;
+
+    // Fallback: auto-detect imports when no requirements.txt exists
+    if !script_dir.join("requirements.txt").exists() {
+        let deps = dependency_manager::detect_dependencies(&main_py).await?;
+        dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
+    }
 
     // Run script
-    python_runner::execute_script(&script_path, &state.python_exec).await
+    python_runner::execute_script(&main_py, &state.python_exec).await
+}
+
+#[tauri::command]
+async fn update_all_dependencies(state: State<'_, AppState>) -> Result<(), String> {
+    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec)
+        .await
 }
 
 #[tauri::command]
@@ -104,12 +135,13 @@ fn main() {
             script_manager::add_script,
             script_manager::add_official_script,
             script_manager::get_local_scripts,
+            update_all_dependencies,
             check_admin_key,
             generate_admin_key
         ])
         .manage(AppState {
             scripts_dir: PathBuf::from("./scripts"),
-            python_exec: PathBuf::from("./python/bin/python"),
+            python_exec: resolve_python_exec(),
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
