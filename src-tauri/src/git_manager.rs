@@ -16,11 +16,41 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
                 "https://github.com/PatrykEmilLibert/script-runner-scripts.git".to_string()
             });
             log::info!("Cloning scripts repo from {}", remote_url);
-            Repository::clone(&remote_url, scripts_dir)
-                .map_err(|e| format!("Failed to clone scripts repo: {}", e))?;
-            sync_from_git(scripts_dir)
+            match Repository::clone(&remote_url, scripts_dir) {
+                Ok(_) => sync_from_git(scripts_dir),
+                Err(e) => {
+                    log::warn!("Clone failed: {}. Trying local fallback.", e);
+                    let local_fallback = std::env::var("SCRIPTS_LOCAL_PATH")
+                        .ok()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| PathBuf::from("../script-runner-scripts"));
+                    if local_fallback.exists() {
+                        copy_dir_all(&local_fallback, scripts_dir)
+                            .map_err(|err| format!("Fallback copy failed: {}", err))?;
+                        Ok("Scripts synced from local fallback".to_string())
+                    } else {
+                        Err(format!("Failed to clone scripts repo and no local fallback at {:?}", local_fallback))
+                    }
+                }
+            }
         }
     }
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 fn sync_from_git(repo_path: &Path) -> Result<String, String> {
