@@ -28,7 +28,7 @@ export default function DarkModeToggle() {
 
     // Sync with backend
     try {
-      const { invoke } = await import('@tauri-apps/api/tauri');
+      const { invoke } = await import('@tauri-apps/api/core');
       invoke('toggle_dark_mode');
     } catch (e) {
       console.error('Failed to sync dark mode:', e);

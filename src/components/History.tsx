@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import SearchBox from './SearchBox';
 import { Download, ChevronDown, ChevronUp } from 'lucide-react';
