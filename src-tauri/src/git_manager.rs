@@ -20,16 +20,19 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
                 Ok(_) => sync_from_git(scripts_dir),
                 Err(e) => {
                     log::warn!("Clone failed: {}. Trying local fallback.", e);
-                    let local_fallback = std::env::var("SCRIPTS_LOCAL_PATH")
-                        .ok()
-                        .map(PathBuf::from)
-                        .unwrap_or_else(|| PathBuf::from("../script-runner-scripts"));
-                    if local_fallback.exists() {
-                        copy_dir_all(&local_fallback, scripts_dir)
+                    let mut candidates: Vec<PathBuf> = Vec::new();
+                    if let Ok(env_path) = std::env::var("SCRIPTS_LOCAL_PATH") {
+                        candidates.push(PathBuf::from(env_path));
+                    }
+                    candidates.push(PathBuf::from("../script-runner-scripts"));
+                    candidates.push(PathBuf::from("../../script-runner-scripts"));
+                    if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+                        log::info!("Using local fallback at {:?}", found);
+                        copy_dir_all(&found, scripts_dir)
                             .map_err(|err| format!("Fallback copy failed: {}", err))?;
                         Ok("Scripts synced from local fallback".to_string())
                     } else {
-                        Err(format!("Failed to clone scripts repo and no local fallback at {:?}", local_fallback))
+                        Err("Failed to clone scripts repo and no local fallback found".to_string())
                     }
                 }
             }
