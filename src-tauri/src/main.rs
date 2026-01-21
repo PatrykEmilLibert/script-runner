@@ -47,15 +47,24 @@ fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
     }
-
     #[cfg(target_os = "windows")]
     {
-        PathBuf::from("./python/Scripts/python.exe")
+        let bundled = PathBuf::from("./python/Scripts/python.exe");
+        if bundled.exists() {
+            return bundled;
+        }
+        // Fallback to system python on PATH
+        PathBuf::from("python")
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        PathBuf::from("./python/bin/python")
+        let bundled = PathBuf::from("./python/bin/python");
+        if bundled.exists() {
+            return bundled;
+        }
+        // Fallback to system python on PATH
+        PathBuf::from("python3")
     }
 }
 
