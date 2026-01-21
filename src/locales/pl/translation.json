@@ -1,0 +1,120 @@
+{
+  "app": {
+    "title": "Runner Skryptów",
+    "subtitle": "Uruchamiaj i zarządzaj skryptami Python",
+    "loading": "Ładowanie...",
+    "error": "Błąd",
+    "success": "Sukces",
+    "confirm": "Potwierdź",
+    "cancel": "Anuluj"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "scripts": "Skrypty",
+    "history": "Historia",
+    "settings": "Ustawienia",
+    "adminKey": "Klucz Admin",
+    "diagnostics": "Diagnostyka"
+  },
+  "buttons": {
+    "run": "Uruchom",
+    "sync": "Synchronizuj",
+    "refresh": "Odśwież",
+    "add": "Dodaj",
+    "delete": "Usuń",
+    "edit": "Edytuj",
+    "export": "Eksportuj",
+    "download": "Pobierz",
+    "search": "Szukaj",
+    "clear": "Wyczyść"
+  },
+  "dashboard": {
+    "title": "Panel",
+    "recentRuns": "Ostatnie uruchomienia",
+    "noRuns": "Brak historii uruchomień",
+    "runCount": "Uruchomienia",
+    "status": "Status",
+    "scriptName": "Nazwa skryptu",
+    "startTime": "Czas rozpoczęcia",
+    "duration": "Czas trwania",
+    "output": "Wyjście",
+    "successfulRuns": "Udane uruchomienia",
+    "failedRuns": "Nieudane uruchomienia"
+  },
+  "scripts": {
+    "title": "Skrypty",
+    "noScripts": "Brak dostępnych skryptów",
+    "availableScripts": "Dostępne skrypty",
+    "scriptDetails": "Szczegóły skryptu",
+    "description": "Opis",
+    "addScript": "Dodaj skrypt",
+    "addOfficialScript": "Dodaj oficjalny skrypt",
+    "selectScript": "Wybierz skrypt",
+    "running": "Uruchamianie...",
+    "completed": "Ukończone",
+    "error": "Błąd"
+  },
+  "history": {
+    "title": "Historia uruchomień",
+    "noHistory": "Brak historii",
+    "filterBy": "Filtruj po nazwie",
+    "exportAs": "Eksportuj jako",
+    "csv": "CSV",
+    "txt": "TXT",
+    "date": "Data",
+    "time": "Czas",
+    "script": "Skrypt",
+    "statusCol": "Status",
+    "durationMs": "Czas (ms)",
+    "durationSec": "Czas (s)",
+    "success": "Powodzenie",
+    "failed": "Błąd",
+    "aborted": "Przerwane",
+    "details": "Szczegóły",
+    "hideOutput": "Ukryj wyjście",
+    "showOutput": "Pokaż wyjście"
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "appearance": "Wygląd",
+    "darkMode": "Tryb ciemny",
+    "language": "Język",
+    "notifications": "Powiadomienia",
+    "notifyOnComplete": "Włącz powiadomienia po zakończeniu",
+    "enableNotifications": "Włącz powiadomienia",
+    "deleteHistory": "Usuń historię",
+    "deleteHistoryConfirm": "Czy na pewno chcesz usunąć całą historię?",
+    "cacheSettings": "Pamięć podręczna",
+    "clearCache": "Wyczyść pamięć podręczną",
+    "about": "O programie",
+    "version": "Wersja"
+  },
+  "logs": {
+    "title": "Logi",
+    "clear": "Wyczyść logi",
+    "noLogs": "Brak logów"
+  },
+  "admin": {
+    "title": "Panel administratora",
+    "keyNotFound": "Klucz administratora nie znaleziony",
+    "keyValid": "Klucz jest ważny",
+    "generateKey": "Wygeneruj klucz",
+    "keyPath": "Ścieżka klucza",
+    "created": "Stworzony",
+    "lastChecked": "Ostatnia kontrola"
+  },
+  "messages": {
+    "scriptRunning": "Skrypt jest uruchamiany...",
+    "scriptCompleted": "Skrypt ukończony",
+    "scriptFailed": "Skrypt zakończył się błędem",
+    "dependenciesInstalling": "Instalowanie zależności...",
+    "dependenciesInstalled": "Zależności zainstalowane",
+    "syncingScripts": "Synchronizowanie skryptów...",
+    "scriptsSynced": "Skrypty zsynchronizowane",
+    "invalidAdminKey": "Niedostępne - wymagany klucz administratora",
+    "copied": "Skopiowano",
+    "deletedSuccessfully": "Usunięto pomyślnie",
+    "errorOccurred": "Wystąpił błąd",
+    "tryAgain": "Spróbuj ponownie"
+  }
+}
