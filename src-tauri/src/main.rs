@@ -240,6 +240,11 @@ fn get_settings() -> Result<settings::AppSettings, String> {
     settings::load_settings()
 }
 
+#[tauri::command]
+fn get_scripts_dir(state: State<'_, AppState>) -> Result<String, String> {
+    Ok(state.scripts_dir.to_string_lossy().to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -258,7 +263,8 @@ fn main() {
             get_run_history,
             export_history_as_csv,
             toggle_dark_mode,
-            get_settings
+            get_settings,
+            get_scripts_dir
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]
@@ -278,7 +284,7 @@ fn main() {
             Ok(())
         })
         .manage(AppState {
-            scripts_dir: PathBuf::from("./scripts"),
+            scripts_dir: PathBuf::from("./script-runner-scripts"),
             python_exec: resolve_python_exec(),
         })
         .run(tauri::generate_context!())

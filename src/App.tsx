@@ -23,8 +23,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "history" | "logs">("dashboard");
   const [showAddScript, setShowAddScript] = useState(false);
-  const [scriptsDir] = useState("P:\\python_runner_github\\script-runner-scripts");
-  const [officialDir] = useState("P:\\python_runner_github\\script-runner-scripts");
+  const [scriptsDir, setScriptsDir] = useState<string>("");
+  const [officialDir, setOfficialDir] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [officialScripts, setOfficialScripts] = useState<string[]>([]);
 
@@ -48,7 +48,12 @@ export default function App() {
           setIsAdmin(false);
         }
 
-        // Sync scripts from GitHub
+        // Resolve scripts directory from backend
+        const dir: string = await invoke("get_scripts_dir");
+        setScriptsDir(dir);
+        setOfficialDir(dir);
+
+        // Sync scripts from GitHub (clone if missing)
         await invoke("sync_scripts");
 
         // List available scripts
@@ -74,6 +79,7 @@ export default function App() {
 
   const loadLocalScripts = async () => {
     try {
+      if (!scriptsDir) return;
       const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir, subdir: "scripts" });
       const names = localScripts.map((s: any) => s.name ?? "");
       setScripts(names);
@@ -84,6 +90,7 @@ export default function App() {
 
   const loadOfficialScripts = async () => {
     try {
+      if (!officialDir) return;
       const items: any[] = await invoke("get_local_scripts", { scriptsDir: officialDir, subdir: "official" });
       const names = items.map((s: any) => s.name ?? "");
       setOfficialScripts(names);

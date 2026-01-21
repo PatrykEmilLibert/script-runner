@@ -8,11 +8,19 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
             .map_err(|e| format!("Failed to create scripts dir: {}", e))?;
     }
 
-    let default_path = PathBuf::from(".");
-    let repo_path = scripts_dir.parent().unwrap_or(&default_path);
-
-    // Require internet connection - no offline mode
-    sync_from_git(repo_path)
+    // Try to open repo at scripts_dir; if missing, clone from env or default URL
+    match Repository::open(scripts_dir) {
+        Ok(_) => sync_from_git(scripts_dir),
+        Err(_) => {
+            let remote_url = std::env::var("SCRIPTS_REPO_URL").unwrap_or_else(|_| {
+                "https://github.com/PatrykEmilLibert/script-runner-scripts.git".to_string()
+            });
+            log::info!("Cloning scripts repo from {}", remote_url);
+            Repository::clone(&remote_url, scripts_dir)
+                .map_err(|e| format!("Failed to clone scripts repo: {}", e))?;
+            sync_from_git(scripts_dir)
+        }
+    }
 }
 
 fn sync_from_git(repo_path: &Path) -> Result<String, String> {
@@ -43,7 +51,7 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
             Ok("Scripts synced successfully".to_string())
         }
         Err(_) => {
-            log::info!("No Git repo found, skipping sync");
+            log::info!("No Git repo found at {:?}, skipping sync", repo_path);
             Err("No repository".to_string())
         }
     }
