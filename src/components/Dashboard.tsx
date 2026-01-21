@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { BarChart3, Zap, GitBranch, Plus } from "lucide-react";
+import AdminKeyDiagnostics from "./AdminKeyDiagnostics";
 
 interface DashboardProps {
   scripts: string[];
@@ -11,6 +12,8 @@ interface DashboardProps {
 export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts }: DashboardProps) {
   return (
     <motion.div className="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <AdminKeyDiagnostics />
+      
       <div className="dashboard-grid">
         <motion.div className="card" whileHover={{ scale: 1.05 }}>
           <BarChart3 className="card-icon" />
