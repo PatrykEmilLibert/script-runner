@@ -52,7 +52,13 @@
     "selectScript": "Wybierz skrypt",
     "running": "Uruchamianie...",
     "completed": "Ukończone",
-    "error": "Błąd"
+    "error": "Błąd",
+    "searchPlaceholder": "Szukaj skryptów",
+    "viewList": "Lista",
+    "viewGrid": "Kafelki",
+    "officialScripts": "Oficjalne skrypty",
+    "userScripts": "Twoje skrypty",
+    "noScriptsFiltered": "Brak skryptów dla tego filtra"
   },
   "history": {
     "title": "Historia uruchomień",

@@ -27,6 +27,8 @@ export default function App() {
   const [officialDir, setOfficialDir] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [officialScripts, setOfficialScripts] = useState<string[]>([]);
+  const [scriptSearch, setScriptSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   useEffect(() => {
     const initApp = async () => {
@@ -212,13 +214,58 @@ export default function App() {
           />
         )}
         {activeTab === "scripts" && (
-          <div className="scripts-section">
-            {isAdmin && (
-              <div className="mb-4">
-                <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
+          <div className="scripts-section space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  className={`px-3 py-2 rounded-lg border dark:border-gray-700 ${
+                    viewMode === "list" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100"
+                  }`}
+                  onClick={() => setViewMode("list")}
+                >
+                  {t('scripts.viewList')}
+                </button>
+                <button
+                  className={`px-3 py-2 rounded-lg border dark:border-gray-700 ${
+                    viewMode === "grid" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100"
+                  }`}
+                  onClick={() => setViewMode("grid")}
+                >
+                  {t('scripts.viewGrid')}
+                </button>
               </div>
-            )}
-            <ScriptList scripts={scripts} selected={selectedScript} onSelect={setSelectedScript} />
+              <div className="flex-1 md:max-w-md">
+                <SearchBox onSearch={setScriptSearch} />
+              </div>
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAddScript(true)}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    {t('scripts.addScript')}
+                  </button>
+                  <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
+                </div>
+              )}
+            </div>
+
+            <ScriptList
+              title={t('scripts.officialScripts')}
+              scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+              emptyText={t('scripts.noScripts')}
+              viewMode={viewMode}
+            />
+
+            <ScriptList
+              title={t('scripts.userScripts')}
+              scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+              selected={selectedScript}
+              onSelect={setSelectedScript}
+              emptyText={t('scripts.noScripts')}
+              viewMode={viewMode}
+            />
+
             {selectedScript && (
               <ScriptExecutor script={selectedScript} onOutput={setOutput} />
             )}
