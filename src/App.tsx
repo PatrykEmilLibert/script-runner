@@ -1,22 +1,26 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import Dashboard from "./components/Dashboard";
 import ScriptList from "./components/ScriptList";
 import ScriptExecutor from "./components/ScriptExecutor";
 import LogViewer from "./components/LogViewer";
+import History from "./components/History";
 import { AddScript } from "./components/AddScript";
 import { AdminDropzone } from "./components/AdminDropzone";
+import DarkModeToggle from "./components/DarkModeToggle";
 import "./App.css";
 
 export default function App() {
+  const { t } = useTranslation();
   const [appBlocked, setAppBlocked] = useState(false);
   const [networkError, setNetworkError] = useState(false);
   const [scripts, setScripts] = useState<string[]>([]);
   const [selectedScript, setSelectedScript] = useState<string | null>(null);
   const [output, setOutput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "logs">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "history" | "logs">("dashboard");
   const [showAddScript, setShowAddScript] = useState(false);
   const [scriptsDir] = useState("P:\\python_runner_github\\script-runner-scripts");
   const [officialDir] = useState("P:\\python_runner_github\\script-runner-scripts");
@@ -99,15 +103,8 @@ export default function App() {
     return (
       <motion.div className="blocked-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="blocked-content">
-          <h1>⚠️ No Internet Connection</h1>
-          <p>ScriptRunner requires an active internet connection to:</p>
-          <ul style={{ textAlign: 'left', marginTop: '20px' }}>
-            <li>Verify security status (kill switch)</li>
-            <li>Sync scripts from GitHub</li>
-            <li>Install Python dependencies</li>
-            <li>Download updates</li>
-          </ul>
-          <p style={{ marginTop: '20px' }}>Please connect to the internet and restart the application.</p>
+          <h1>⚠️ {t('messages.errorOccurred')}</h1>
+          <p>{t('app.title')}</p>
         </div>
       </motion.div>
     );
@@ -117,9 +114,8 @@ export default function App() {
     return (
       <motion.div className="blocked-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="blocked-content">
-          <h1>Application Blocked</h1>
-          <p>This application has been remotely disabled for security reasons.</p>
-          <p>Please contact your administrator.</p>
+          <h1>{t('app.title')}</h1>
+          <p>{t('messages.invalidAdminKey')}</p>
         </div>
       </motion.div>
     );
@@ -129,40 +125,67 @@ export default function App() {
     return (
       <motion.div className="loading-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="spinner"></div>
-        <p>Initializing ScriptRunner...</p>
+        <p>{t('app.loading')}</p>
       </motion.div>
     );
   }
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>🚀 ScriptRunner</h1>
-        <p>Python Script Executor with Auto-Update</p>
+    <div className="app-container dark:bg-gray-900 dark:text-white">
+      <header className="app-header bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1>🚀 {t('app.title')}</h1>
+            <p className="text-gray-600 dark:text-gray-400">{t('app.subtitle')}</p>
+          </div>
+          <DarkModeToggle />
+        </div>
       </header>
 
-      <nav className="app-nav">
+      <nav className="app-nav flex gap-2 bg-gray-100 dark:bg-gray-800 p-4 border-b dark:border-gray-700">
         <button
-          className={`nav-btn ${activeTab === "dashboard" ? "active" : ""}`}
+          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "dashboard"
+              ? "bg-blue-600 text-white"
+              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+          }`}
           onClick={() => setActiveTab("dashboard")}
         >
-          Dashboard
+          {t('nav.dashboard')}
         </button>
         <button
-          className={`nav-btn ${activeTab === "scripts" ? "active" : ""}`}
+          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "scripts"
+              ? "bg-blue-600 text-white"
+              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+          }`}
           onClick={() => setActiveTab("scripts")}
         >
-          Scripts
+          {t('nav.scripts')}
         </button>
         <button
-          className={`nav-btn ${activeTab === "logs" ? "active" : ""}`}
+          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "history"
+              ? "bg-blue-600 text-white"
+              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+          }`}
+          onClick={() => setActiveTab("history")}
+        >
+          {t('nav.history')}
+        </button>
+        <button
+          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "logs"
+              ? "bg-blue-600 text-white"
+              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+          }`}
           onClick={() => setActiveTab("logs")}
         >
-          Logs
+          {t('logs.title')}
         </button>
       </nav>
 
-      <main className="app-main">
+      <main className="app-main p-4">
         {activeTab === "dashboard" && (
           <Dashboard
             scripts={scripts}
@@ -184,6 +207,7 @@ export default function App() {
             )}
           </div>
         )}
+        {activeTab === "history" && <History />}
         {activeTab === "logs" && selectedScript && (
           <LogViewer scriptName={selectedScript} />
         )}
@@ -199,12 +223,12 @@ export default function App() {
 
       {output && (
         <motion.div
-          className="output-panel"
+          className="output-panel bg-gray-900 text-gray-100 rounded-lg border dark:border-gray-700"
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
         >
-          <h3>Output</h3>
-          <pre>{output}</pre>
+          <h3 className="font-bold p-4 border-b dark:border-gray-700">{t('dashboard.output')}</h3>
+          <pre className="p-4 overflow-auto max-h-60">{output}</pre>
         </motion.div>
       )}
     </div>

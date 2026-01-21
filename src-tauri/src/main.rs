@@ -3,9 +3,8 @@
     windows_subsystem = "windows"
 )]
 
-use dirs;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::State;
 
 mod admin_key;
@@ -14,6 +13,8 @@ mod git_manager;
 mod kill_switch;
 mod python_runner;
 mod script_manager;
+mod run_history;
+mod settings;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -52,6 +53,7 @@ async fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn run_script(script_name: String, state: State<'_, AppState>) -> Result<String, String> {
+    let start_time = chrono::Utc::now();
     let script_dir = state.scripts_dir.join(&script_name);
     let main_py = script_dir.join("main.py");
 
@@ -64,8 +66,30 @@ async fn run_script(script_name: String, state: State<'_, AppState>) -> Result<S
         dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
     }
 
-    // Run script
-    python_runner::execute_script(&main_py, &state.python_exec).await
+    // Run script and capture history
+    let result = python_runner::execute_script(&main_py, &state.python_exec).await;
+    let end_time = chrono::Utc::now();
+    let duration = end_time.signed_duration_since(start_time);
+
+    let (status, error) = match &result {
+        Ok(_) => ("success".to_string(), None),
+        Err(e) => ("error".to_string(), Some(e.clone())),
+    };
+
+    let record = run_history::RunRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        script_name: script_name.clone(),
+        start_time: start_time.to_rfc3339(),
+        end_time: end_time.to_rfc3339(),
+        duration_ms: duration.num_milliseconds() as u64,
+        status,
+        output: result.as_ref().unwrap_or(&String::new()).clone(),
+        error,
+    };
+
+    let _ = run_history::add_record(record);
+
+    result
 }
 
 #[tauri::command]
@@ -138,12 +162,12 @@ fn check_admin_key() -> Result<bool, String> {
 #[tauri::command]
 fn generate_admin_key() -> Result<String, String> {
     let path = admin_key::desktop_key_path();
-    let payload = admin_key::write_key_file(&path)?;
+    let _payload = admin_key::write_key_file(&path)?;
     Ok(format!("{}", path.to_string_lossy()))
 }
 
 #[tauri::command]
-fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
+fn get_admin_key_info() -> Result<serde_json::Value, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
@@ -181,7 +205,7 @@ fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
         candidates.push(PathBuf::from("/tmp/sr-admin.key"));
     }
 
-    let info: Vec<serde_json::json::Value> = candidates
+    let info: Vec<serde_json::Value> = candidates
         .iter()
         .map(|p| {
             serde_json::json!({
@@ -193,6 +217,27 @@ fn get_admin_key_info() -> Result<serde_json::json::Value, String> {
         .collect();
 
     Ok(serde_json::json!({ "candidates": info }))
+}
+
+#[tauri::command]
+fn get_run_history(limit: usize) -> Result<Vec<run_history::RunRecord>, String> {
+    run_history::get_records(limit)
+}
+
+#[tauri::command]
+fn export_history_as_csv(limit: usize) -> Result<String, String> {
+    let records = run_history::get_records(limit)?;
+    Ok(run_history::export_as_csv(&records))
+}
+
+#[tauri::command]
+fn toggle_dark_mode() -> Result<bool, String> {
+    settings::toggle_dark_mode()
+}
+
+#[tauri::command]
+fn get_settings() -> Result<settings::AppSettings, String> {
+    settings::load_settings()
 }
 
 fn main() {
@@ -209,7 +254,11 @@ fn main() {
             update_all_dependencies,
             check_admin_key,
             generate_admin_key,
-            get_admin_key_info
+            get_admin_key_info,
+            get_run_history,
+            export_history_as_csv,
+            toggle_dark_mode,
+            get_settings
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]
