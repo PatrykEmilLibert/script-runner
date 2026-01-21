@@ -22,6 +22,27 @@ pub struct AppState {
     python_exec: PathBuf,
 }
 
+fn resolve_scripts_dir() -> PathBuf {
+    if let Ok(custom) = env::var("SR_SCRIPTS_DIR") {
+        let p = PathBuf::from(custom);
+        if p.exists() { return p; }
+    }
+
+    // Prefer workspace-level repo outside src-tauri to avoid rebuild loops
+    let candidates = [
+        PathBuf::from("../../script-runner-scripts"),
+        PathBuf::from("../script-runner-scripts"),
+        PathBuf::from("./script-runner-scripts"),
+    ];
+
+    for c in candidates.iter() {
+        if c.exists() { return c.clone(); }
+    }
+
+    // Fallback to local folder (will be created if syncing/cloning happens)
+    PathBuf::from("./script-runner-scripts")
+}
+
 fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
@@ -284,7 +305,7 @@ fn main() {
             Ok(())
         })
         .manage(AppState {
-            scripts_dir: PathBuf::from("./script-runner-scripts"),
+            scripts_dir: resolve_scripts_dir(),
             python_exec: resolve_python_exec(),
         })
         .run(tauri::generate_context!())
