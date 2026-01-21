@@ -9,6 +9,7 @@ import LogViewer from "./components/LogViewer";
 import History from "./components/History";
 import { AddScript } from "./components/AddScript";
 import { AdminDropzone } from "./components/AdminDropzone";
+import GenerateAdminKey from "./components/GenerateAdminKey";
 import DarkModeToggle from "./components/DarkModeToggle";
 import "./App.css";
 
@@ -127,6 +128,15 @@ export default function App() {
         <div className="spinner"></div>
         <p>{t('app.loading')}</p>
       </motion.div>
+    );
+  }
+
+  // Jeśli brak klucza administratora - pokaż formularz generowania
+  if (!isAdmin) {
+    return (
+      <div className="app-container dark:bg-gray-900 dark:text-white flex items-center justify-center min-h-screen">
+        <GenerateAdminKey onGenerated={() => window.location.reload()} />
+      </div>
     );
   }
 
