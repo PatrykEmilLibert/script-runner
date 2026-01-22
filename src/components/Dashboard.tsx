@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { BarChart3, Zap, GitBranch, Plus } from "lucide-react";
+import { Card, SimpleGrid, Group, Stack, Title, Text, Button, ThemeIcon, Badge } from "@mantine/core";
+import { BarChart3, Zap, GitBranch, Plus, Lock, FileText } from "lucide-react";
 import AdminKeyDiagnostics from "./AdminKeyDiagnostics";
 
 interface DashboardProps {
@@ -10,62 +10,73 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts }: DashboardProps) {
+  const StatCard = ({ icon: Icon, title, value }: { icon: any; title: string; value: string | number }) => (
+    <Card withBorder p="lg" radius="md" style={{ cursor: "pointer" }} className="hover:shadow-md transition-all">
+      <Group justify="space-between" mb="xs">
+        <Title order={4}>{title}</Title>
+        <ThemeIcon variant="light" size="lg" radius="md">
+          <Icon size={18} />
+        </ThemeIcon>
+      </Group>
+      <Text fw={700} size="xl">
+        {value}
+      </Text>
+    </Card>
+  );
+
   return (
-    <motion.div className="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <Stack gap="lg">
       <AdminKeyDiagnostics />
-      
-      <div className="dashboard-grid">
-        <motion.div className="card" whileHover={{ scale: 1.05 }}>
-          <BarChart3 className="card-icon" />
-          <h3>Total Scripts</h3>
-          <p className="card-value">{scripts.length + officialScripts.length}</p>
-        </motion.div>
 
-        <motion.div className="card" whileHover={{ scale: 1.05 }}>
-          <Zap className="card-icon" />
-          <h3>Status</h3>
-          <p className="card-value">Active</p>
-        </motion.div>
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+        <StatCard icon={BarChart3} title="Total Scripts" value={scripts.length + officialScripts.length} />
+        <StatCard icon={Zap} title="Status" value="Active" />
+        <StatCard icon={GitBranch} title="Last Sync" value="Now" />
+      </SimpleGrid>
 
-        <motion.div className="card" whileHover={{ scale: 1.05 }}>
-          <GitBranch className="card-icon" />
-          <h3>Last Sync</h3>
-          <p className="card-value">Now</p>
-        </motion.div>
-      </div>
-
-      <motion.div className="recent-scripts" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
-        <div className="flex justify-between items-center mb-4">
-          <h2>Official Scripts</h2>
+      <Stack gap="lg">
+        <Group justify="space-between">
+          <Title order={2}>Official Scripts</Title>
           {isAdmin && (
-            <button
+            <Button
+              leftSection={<Plus size={18} />}
               onClick={onAddScript}
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-4 py-2 rounded-lg font-medium transition-all"
+              variant="gradient"
+              gradient={{ from: "blue", to: "purple" }}
             >
-              <Plus size={20} />
               Add Script
-            </button>
+            </Button>
           )}
-        </div>
-        <ul>
-          {officialScripts.slice(0, 5).map((script) => (
-            <li key={script}>
-              <span className="script-icon">🔒</span>
-              {script}
-            </li>
-          ))}
-        </ul>
+        </Group>
 
-        <h3 className="mt-6 mb-2">User Scripts</h3>
-        <ul>
-          {scripts.slice(0, 5).map((script) => (
-            <li key={script}>
-              <span className="script-icon">📄</span>
-              {script}
-            </li>
+        <Stack gap="xs">
+          {officialScripts.slice(0, 5).map((script) => (
+            <Group key={script} p="sm" style={{ borderRadius: "8px" }} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <ThemeIcon variant="light" color="blue" size="lg">
+                <Lock size={18} />
+              </ThemeIcon>
+              <Text fw={500}>{script}</Text>
+              <Badge size="sm" variant="light" ml="auto">
+                Official
+              </Badge>
+            </Group>
           ))}
-        </ul>
-      </motion.div>
-    </motion.div>
+        </Stack>
+
+        <Title order={3} mt="lg">
+          User Scripts
+        </Title>
+        <Stack gap="xs">
+          {scripts.slice(0, 5).map((script) => (
+            <Group key={script} p="sm" style={{ borderRadius: "8px" }} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <ThemeIcon variant="light" color="gray" size="lg">
+                <FileText size={18} />
+              </ThemeIcon>
+              <Text fw={500}>{script}</Text>
+            </Group>
+          ))}
+        </Stack>
+      </Stack>
+    </Stack>
   );
 }

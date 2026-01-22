@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { Card, Button, Group, SimpleGrid, Stack, Title, Text, Badge } from "@mantine/core";
 import { Play, Trash, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -25,80 +25,98 @@ export default function ScriptList({
 }: ScriptListProps) {
   const { t } = useTranslation();
 
-  const Wrapper = ({ children }: { children: React.ReactNode }) => (
-    <motion.div className="script-list" initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
-      {children}
-    </motion.div>
-  );
-
   if (!scripts.length) {
     return (
-      <Wrapper>
-        <h2 className="text-xl font-semibold mb-2">{title}</h2>
-        <div className="p-4 text-gray-500 dark:text-gray-400 border rounded-lg dark:border-gray-700">
-          {emptyText}
-        </div>
-      </Wrapper>
+      <Stack gap="md">
+        <Title order={2}>{title}</Title>
+        <Card p="md" radius="md" withBorder>
+          <Text c="dimmed">{emptyText}</Text>
+        </Card>
+      </Stack>
     );
   }
 
+  const ScriptCard = ({ script }: { script: string }) => (
+    <Card
+      key={script}
+      p="md"
+      radius="md"
+      withBorder
+      shadow={selected === script ? "md" : "xs"}
+      style={{
+        cursor: onSelect ? "pointer" : "default",
+        border: selected === script ? "2px solid #4dabf7" : undefined,
+        transition: "all 0.2s ease",
+      }}
+      onClick={() => onSelect && onSelect(script)}
+      onMouseEnter={(e) => {
+        if (onSelect) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (onSelect && selected !== script) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-xs)";
+        }
+      }}
+    >
+      <Group justify="space-between" wrap="nowrap">
+        <div style={{ flex: 1 }}>
+          <Text fw={500} size="sm">
+            {script}
+          </Text>
+        </div>
+        <Group gap="xs" wrap="nowrap">
+          {onSelect && (
+            <Badge leftSection={<Play size={12} />} variant="light" color="blue">
+              {t("buttons.run", { defaultValue: "Uruchom" })}
+            </Badge>
+          )}
+          {onEncrypt && (
+            <Button
+              variant="subtle"
+              color="yellow"
+              size="xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEncrypt(script);
+              }}
+              aria-label="Encrypt script"
+              title="Encrypt this script to protect it from viewing/editing"
+            >
+              <Lock size={16} />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="subtle"
+              color="red"
+              size="xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(script);
+              }}
+              aria-label={t("buttons.delete", { defaultValue: "Usuń" })}
+            >
+              <Trash size={16} />
+            </Button>
+          )}
+        </Group>
+      </Group>
+    </Card>
+  );
+
+  const layoutComponent = viewMode === "grid" ? SimpleGrid : Stack;
+  const layoutProps = viewMode === "grid" ? { cols: { base: 1, sm: 2, md: 3 }, spacing: "md" } : { gap: "md" };
+
   return (
-    <Wrapper>
-      <h2 className="text-xl font-semibold mb-2">{title}</h2>
-      <div
-        className={`scripts-container grid gap-2 ${
-          viewMode === "grid" ? "grid-cols-2 md:grid-cols-3" : "grid-cols-1"
-        }`}
-      >
-        {scripts.map((script) => (
-          <motion.button
-            key={script}
-            className={`script-item flex items-center justify-between px-4 py-3 rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:shadow transition ${
-              selected === script ? "ring-2 ring-blue-500" : ""
-            } ${onSelect ? "cursor-pointer" : "cursor-default"}`}
-            onClick={() => onSelect && onSelect(script)}
-            whileHover={{ scale: onSelect ? 1.02 : 1 }}
-            whileTap={{ scale: onSelect ? 0.98 : 1 }}
-          >
-            <span className="script-name text-left">{script}</span>
-            <span className="flex items-center gap-2">
-              {onSelect && (
-                <span className="script-status inline-flex items-center gap-1 text-blue-600 font-semibold text-sm">
-                  <Play size={16} />
-                  {t("buttons.run", { defaultValue: "Uruchom" })}
-                </span>
-              )}
-              {onEncrypt && (
-                <button
-                  type="button"
-                  className="text-yellow-500 hover:text-yellow-600"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEncrypt(script);
-                  }}
-                  aria-label="Encrypt script"
-                  title="Encrypt this script to protect it from viewing/editing"
-                >
-                  <Lock size={16} />
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  type="button"
-                  className="text-red-500 hover:text-red-600"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(script);
-                  }}
-                  aria-label={t("buttons.delete", { defaultValue: "Usuń" })}
-                >
-                  <Trash size={16} />
-                </button>
-              )}
-            </span>
-          </motion.button>
-        ))}
-      </div>
-    </Wrapper>
+    <Stack gap="md">
+      <Title order={2}>{title}</Title>
+      {layoutComponent === SimpleGrid ? (
+        <SimpleGrid {...layoutProps}>{scripts.map((script) => <ScriptCard script={script} />)}</SimpleGrid>
+      ) : (
+        <Stack {...layoutProps}>{scripts.map((script) => <ScriptCard script={script} />)}</Stack>
+      )}
+    </Stack>
   );
 }

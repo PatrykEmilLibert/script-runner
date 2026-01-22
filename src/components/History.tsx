@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { Table, Badge, Title, Group, Button, Stack, Code, Alert, Text } from '@mantine/core';
+import { Download } from 'lucide-react';
 import SearchBox from './SearchBox';
-import { Download, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface RunRecord {
   id: string;
@@ -79,93 +80,87 @@ export default function History() {
   };
 
   if (loading) {
-    return <div className="p-4 text-center text-gray-600 dark:text-gray-400">{t('app.loading')}</div>;
+    return <Text ta="center" c="dimmed">{t('app.loading')}</Text>;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t('history.title')}</h2>
-        <button
+    <Stack gap="md">
+      <Group justify="space-between">
+        <Title order={2}>{t('history.title')}</Title>
+        <Button
+          leftSection={<Download size={16} />}
           onClick={exportCsv}
           disabled={filtered.length === 0}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
         >
-          <Download size={16} />
           {t('history.csv')}
-        </button>
-      </div>
+        </Button>
+      </Group>
 
       <SearchBox onSearch={handleSearch} />
 
       {filtered.length === 0 ? (
-        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+        <Alert title={t('history.noHistory')} color="gray">
           {records.length === 0 ? t('history.noHistory') : t('history.noHistory')}
-        </div>
+        </Alert>
       ) : (
-        <div className="space-y-2">
+        <Stack gap="md">
           {filtered.map(record => (
-            <div
-              key={record.id}
-              className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
-            >
-              <button
+            <Stack key={record.id} gap="xs">
+              <Group
+                justify="space-between"
+                style={{ cursor: 'pointer', padding: '12px', borderRadius: '8px' }}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700"
                 onClick={() => setExpanded(expanded === record.id ? null : record.id)}
-                className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-4">
-                    <span className="font-medium text-gray-800 dark:text-gray-200 min-w-40">
-                      {record.script_name}
-                    </span>
-                    <span
-                      className={`px-2 py-1 rounded text-sm font-semibold ${
-                        record.status === 'success'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }`}
-                    >
-                      {record.status === 'success' ? t('history.success') : t('history.failed')}
-                    </span>
-                    <span className="text-sm text-gray-600 dark:text-gray-400 min-w-40">
-                      {formatTime(record.start_time)}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDuration(record.duration_ms)}
-                    </span>
-                  </div>
-                </div>
-                {expanded === record.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-              </button>
+                <Group gap="lg" wrap="wrap">
+                  <Text fw={500} size="sm">
+                    {record.script_name}
+                  </Text>
+                  <Badge
+                    color={record.status === 'success' ? 'green' : 'red'}
+                    variant="light"
+                  >
+                    {record.status === 'success' ? t('history.success') : t('history.failed')}
+                  </Badge>
+                  <Text size="sm" c="dimmed">
+                    {formatTime(record.start_time)}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {formatDuration(record.duration_ms)}
+                  </Text>
+                </Group>
+              </Group>
 
               {expanded === record.id && (
-                <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <Stack gap="md" p="md" style={{ backgroundColor: 'var(--mantine-color-gray-0)' }} className="dark:bg-gray-900 rounded-md">
                   {record.output && (
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <Stack gap="xs">
+                      <Text fw={600} size="sm">
                         {t('dashboard.output')}
-                      </h4>
-                      <pre className="bg-gray-800 text-gray-100 p-3 rounded text-sm overflow-x-auto max-h-60 overflow-y-auto">
+                      </Text>
+                      <Code block p="md" style={{ maxHeight: '240px', overflow: 'auto' }}>
                         {record.output}
-                      </pre>
-                    </div>
+                      </Code>
+                    </Stack>
                   )}
                   {record.error && (
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-red-700 dark:text-red-300 mb-2">
+                    <Stack gap="xs">
+                      <Text fw={600} size="sm" c="red">
                         {t('app.error')}
-                      </h4>
-                      <pre className="bg-red-900 text-red-100 p-3 rounded text-sm overflow-x-auto max-h-40 overflow-y-auto">
-                        {record.error}
-                      </pre>
-                    </div>
+                      </Text>
+                      <Alert color="red" title={t('app.error')}>
+                        <Code block p="md" style={{ maxHeight: '160px', overflow: 'auto' }} color="red">
+                          {record.error}
+                        </Code>
+                      </Alert>
+                    </Stack>
                   )}
-                </div>
+                </Stack>
               )}
-            </div>
+            </Stack>
           ))}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
