@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { useMantineColorScheme } from '@mantine/core';
 
 export default function DarkModeToggle() {
   const [isDark, setIsDark] = useState(false);
+  const { setColorScheme, colorScheme } = useMantineColorScheme();
 
   useEffect(() => {
     // Load from localStorage
     const saved = localStorage.getItem('sr-theme');
     const dark = saved === 'dark';
     setIsDark(dark);
+    setColorScheme(dark ? 'dark' : 'light');
     applyTheme(dark);
   }, []);
 
@@ -23,6 +26,7 @@ export default function DarkModeToggle() {
   const toggle = async () => {
     const newDark = !isDark;
     setIsDark(newDark);
+    setColorScheme(newDark ? 'dark' : 'light');
     localStorage.setItem('sr-theme', newDark ? 'dark' : 'light');
     applyTheme(newDark);
 
