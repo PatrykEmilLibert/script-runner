@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { Key, Copy, Check } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
+import { Stack, Button, Alert, Group, Container, Text, Badge, Code, List } from '@mantine/core';
 
 interface GenerateAdminKeyProps {
   onGenerated: () => void;
@@ -13,9 +14,11 @@ export default function GenerateAdminKey({ onGenerated }: GenerateAdminKeyProps)
   const [success, setSuccess] = useState(false);
   const [keyPath, setKeyPath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     setLoading(true);
+    setError(null);
     try {
       const path: string = await invoke('generate_admin_key');
       setKeyPath(path);
@@ -23,7 +26,7 @@ export default function GenerateAdminKey({ onGenerated }: GenerateAdminKeyProps)
       setTimeout(() => onGenerated(), 1500);
     } catch (e) {
       console.error('Failed to generate key:', e);
-      alert(`Błąd: ${e}`);
+      setError(`Błąd: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -38,78 +41,80 @@ export default function GenerateAdminKey({ onGenerated }: GenerateAdminKeyProps)
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto p-8">
-      <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-600 dark:border-blue-500 p-8">
-        <div className="flex items-center justify-center mb-6">
-          <Key size={48} className="text-blue-600 dark:text-blue-400" />
-        </div>
+    <Container size="md" py="xl">
+      <Stack gap="lg" style={{ border: '2px solid #0066cc', borderRadius: '8px', padding: '32px' }}>
+        <Stack gap="md" align="center">
+          <Badge size="xl">🔐</Badge>
+          <Text size="lg" fw={700} ta="center">
+            Wygeneruj klucz administratora
+          </Text>
+          <Text size="sm" c="dimmed" ta="center">
+            Klucz administratora pozwala na zarządzanie skryptami oficjalnymi i ustawieniami systemu.
+          </Text>
+        </Stack>
 
-        <h1 className="text-3xl font-bold text-center text-gray-800 dark:text-gray-100 mb-4">
-          🔐 Wygeneruj klucz administratora
-        </h1>
-
-        <p className="text-center text-gray-600 dark:text-gray-400 mb-8">
-          Klucz administratora pozwala na zarządzanie skryptami oficjalnymi i ustawieniami systemu.
-        </p>
+        {error && (
+          <Alert color="red" title="Błąd">
+            {error}
+          </Alert>
+        )}
 
         {success && keyPath ? (
-          <div className="space-y-4">
-            <div className="bg-green-100 dark:bg-green-900 border border-green-500 rounded-lg p-4">
-              <p className="text-green-800 dark:text-green-200 font-semibold mb-3">
-                ✅ Klucz został wygenerowany!
-              </p>
-              <p className="text-sm text-green-700 dark:text-green-300 mb-3">
-                Klucz znajduje się w:
-              </p>
-              <div className="bg-green-50 dark:bg-green-950 p-3 rounded border border-green-300 dark:border-green-700 font-mono text-sm break-all mb-3">
-                {keyPath}
-              </div>
-              <button
-                onClick={copyToClipboard}
-                className="flex items-center gap-2 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors justify-center"
-              >
-                {copied ? <Check size={18} /> : <Copy size={18} />}
-                {copied ? 'Skopiowano!' : 'Kopiuj ścieżkę'}
-              </button>
-            </div>
+          <Stack gap="md">
+            <Alert color="green" title="✅ Klucz został wygenerowany!">
+              <Stack gap="sm">
+                <Text size="sm">Klucz znajduje się w:</Text>
+                <Code block p="xs" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {keyPath}
+                </Code>
+                <Button
+                  fullWidth
+                  onClick={copyToClipboard}
+                  leftSection={copied ? <Check size={18} /> : <Copy size={18} />}
+                  color={copied ? 'green' : 'blue'}
+                >
+                  {copied ? 'Skopiowano!' : 'Kopiuj ścieżkę'}
+                </Button>
+              </Stack>
+            </Alert>
 
-            <div className="bg-blue-50 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-200">
-              <strong>Instrukcja:</strong>
-              <ol className="mt-2 space-y-2 list-decimal list-inside">
-                <li>Klucz jest zapisany w pliku JSON na Twoim pulpicie</li>
-                <li>Trzymaj go w bezpiecznym miejscu</li>
-                <li>Możesz skopiować go na inne komputery (Ubuntu, macOS)</li>
-                <li>Umieść go w folderze <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/Desktop</code>
-                </li>
-              </ol>
-            </div>
+            <Alert color="blue" title="Instrukcja">
+              <List type="ordered" withPadding>
+                <List.Item>Klucz jest zapisany w pliku JSON na Twoim pulpicie</List.Item>
+                <List.Item>Trzymaj go w bezpiecznym miejscu</List.Item>
+                <List.Item>Możesz skopiować go na inne komputery (Ubuntu, macOS)</List.Item>
+                <List.Item>
+                  Umieść go w folderze <Code>~/Desktop</Code>
+                </List.Item>
+              </List>
+            </Alert>
 
-            <p className="text-center text-gray-500 dark:text-gray-400 text-sm">
+            <Text size="sm" c="dimmed" ta="center">
               Aplikacja zaraz się przeładuje...
-            </p>
-          </div>
+            </Text>
+          </Stack>
         ) : (
-          <div className="space-y-4">
-            <div className="bg-yellow-50 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
-              <p className="text-yellow-800 dark:text-yellow-200 text-sm">
-                ⚠️ Nie znaleziono klucza administratora. Wygeneruj nowy, aby uzyskać dostęp do funkcji administratora.
-              </p>
-            </div>
+          <Stack gap="md">
+            <Alert color="yellow" title="⚠️ Brak klucza administratora">
+              Wygeneruj nowy, aby uzyskać dostęp do funkcji administratora.
+            </Alert>
 
-            <button
+            <Button
+              fullWidth
+              size="lg"
               onClick={handleGenerate}
-              disabled={loading}
-              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold rounded-lg transition-colors text-lg"
+              loading={loading}
+              color="blue"
             >
-              {loading ? '⏳ Generowanie...' : '🔑 Wygeneruj klucz administratora'}
-            </button>
+              🔑 Wygeneruj klucz administratora
+            </Button>
 
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+            <Text size="sm" c="dimmed" ta="center">
               Klucz będzie zapisany na Twoim pulpicie (Desktop)
-            </p>
-          </div>
+            </Text>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Container>
   );
 }

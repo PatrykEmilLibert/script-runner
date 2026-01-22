@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Button, Alert, Stack, Badge, Text, Code, List, Group } from '@mantine/core';
 
 interface Candidate {
   path: string;
@@ -28,63 +28,72 @@ export default function AdminKeyDiagnostics() {
     }
   };
 
+  const getStatusBadge = (candidate: Candidate) => {
+    if (candidate.valid) return { label: '✅ Valid', color: 'green' };
+    if (candidate.exists) return { label: '⚠️ Invalid Format', color: 'yellow' };
+    return { label: '❌ Not Found', color: 'gray' };
+  };
+
+  const getAlertColor = (candidate: Candidate) => {
+    if (candidate.valid) return 'green';
+    if (candidate.exists) return 'yellow';
+    return 'gray';
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 mb-4">
-      <button
+    <Stack gap="md">
+      <Button
         onClick={checkPaths}
-        disabled={loading}
-        className="w-full flex items-center justify-between px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+        loading={loading}
+        fullWidth
+        variant={expanded ? 'light' : 'filled'}
+        color="blue"
       >
-        <span>🔐 {t('admin.title')} - Diagnostyka klucza</span>
-        {loading ? '⏳' : expanded ? <ChevronUp /> : <ChevronDown />}
-      </button>
+        🔐 {t('admin.title')} - Diagnostyka klucza
+      </Button>
 
       {expanded && info && (
-        <div className="mt-4 space-y-3">
-          {info.candidates.map((candidate, idx) => (
-            <div
-              key={idx}
-              className={`p-3 rounded-lg border-l-4 ${
-                candidate.valid
-                  ? 'bg-green-50 dark:bg-green-900 border-green-500'
-                  : candidate.exists
-                  ? 'bg-yellow-50 dark:bg-yellow-900 border-yellow-500'
-                  : 'bg-gray-50 dark:bg-gray-700 border-gray-500'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <span className="text-lg">
-                  {candidate.valid ? '✅' : candidate.exists ? '⚠️' : '❌'}
-                </span>
-                <div className="flex-1">
-                  <div className="font-mono text-sm text-gray-800 dark:text-gray-200 break-all">
+        <Stack gap="md">
+          {info.candidates.map((candidate, idx) => {
+            const status = getStatusBadge(candidate);
+            return (
+              <Alert
+                key={idx}
+                color={getAlertColor(candidate)}
+                title={
+                  <Group gap="xs">
+                    <Badge color={status.color}>{status.label}</Badge>
+                  </Group>
+                }
+              >
+                <Stack gap="sm">
+                  <Code block p="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                     {candidate.path}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  </Code>
+                  <Text size="sm" c="dimmed">
                     {candidate.valid
                       ? 'Klucz znaleziony i ważny ✓'
                       : candidate.exists
                       ? 'Plik istnieje, ale nie jest ważny (zły format)'
                       : 'Plik nie istnieje'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+                  </Text>
+                </Stack>
+              </Alert>
+            );
+          })}
 
-          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
-            <strong>Jak to działa?</strong>
-            <ol className="mt-2 space-y-1 list-decimal list-inside">
-              <li>1. Sprawdza zmienną env: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">SR_ADMIN_KEY_PATH</code></li>
-              <li>2. Desktop w profilu użytkownika</li>
-              <li>3. <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">USERPROFILE\Desktop</code> (Windows)</li>
-              <li>4. <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">AppData\script-runner</code> (Windows)</li>
-              <li>5. <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/Desktop</code> (Linux/macOS)</li>
-              <li>6. <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">/tmp/sr-admin.key</code> (fallback)</li>
-            </ol>
-          </div>
-        </div>
+          <Alert color="blue" title="Jak to działa?">
+            <List type="ordered" withPadding>
+              <List.Item>Sprawdza zmienną env: <Code>SR_ADMIN_KEY_PATH</Code></List.Item>
+              <List.Item>Desktop w profilu użytkownika</List.Item>
+              <List.Item><Code>USERPROFILE\Desktop</Code> (Windows)</List.Item>
+              <List.Item><Code>AppData\script-runner</Code> (Windows)</List.Item>
+              <List.Item><Code>~/Desktop</Code> (Linux/macOS)</List.Item>
+              <List.Item><Code>/tmp/sr-admin.key</Code> (fallback)</List.Item>
+            </List>
+          </Alert>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }

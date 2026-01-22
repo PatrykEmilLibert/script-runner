@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { motion } from 'framer-motion';
+import { Modal, Button, TextInput, Textarea, Stack, Group, Alert, Badge, Text } from '@mantine/core';
+import { useForm } from '@mantine/form';
 
 interface AddScriptProps {
   onScriptAdded: () => void;
@@ -9,13 +10,21 @@ interface AddScriptProps {
 }
 
 export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, scriptsDir }) => {
-  const [scriptName, setScriptName] = useState('');
-  const [description, setDescription] = useState('');
-  const [author, setAuthor] = useState('');
-  const [scriptContent, setScriptContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
   const [detectedDeps, setDetectedDeps] = useState<string[]>([]);
+
+  const form = useForm({
+    initialValues: {
+      scriptName: '',
+      description: '',
+      author: '',
+      scriptContent: '',
+    },
+    validate: {
+      scriptName: (val) => (!val ? 'Script name is required' : null),
+      scriptContent: (val) => (!val ? 'Script content is required' : null),
+    },
+  });
 
   const analyzeCode = (code: string) => {
     const deps = new Set<string>();
@@ -47,27 +56,23 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
   };
 
   const handleCodeChange = (code: string) => {
-    setScriptContent(code);
+    form.setFieldValue('scriptContent', code);
     analyzeCode(code);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!scriptName || !scriptContent) {
-      setError('Script name and content are required');
+  const handleSubmit = async (values: typeof form.values) => {
+    if (!values.scriptName || !values.scriptContent) {
       return;
     }
     
     setIsSubmitting(true);
-    setError('');
     
     try {
       const result = await invoke<string>('add_script', {
-        scriptName: scriptName.trim(),
-        scriptContent,
-        description: description || 'No description provided',
-        author: author || 'Unknown',
+        scriptName: values.scriptName.trim(),
+        scriptContent: values.scriptContent,
+        description: values.description || 'No description provided',
+        author: values.author || 'Unknown',
         scriptsDir,
       });
       
@@ -75,165 +80,98 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
       onScriptAdded();
       onClose();
     } catch (err) {
-      setError(err as string);
+      form.setFieldError('scriptName', err as string);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title="✨ Add New Script"
+      size="lg"
+      scrollAreaComponent={Stack}
     >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-      >
-        <div className="p-6 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-gray-800 z-10">
-          <h2 className="text-2xl font-bold">✨ Add New Script</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded">
-              {error}
-            </div>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack gap="md">
+          {form.errors.scriptName && (
+            <Alert color="red" title="Error">
+              {form.errors.scriptName}
+            </Alert>
           )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Script Name *
-            </label>
-            <input
-              type="text"
-              value={scriptName}
-              onChange={(e) => setScriptName(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-blue-500"
-              placeholder="my_awesome_script"
-              required
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              No spaces or special characters. Use underscores.
-            </p>
-          </div>
+          <TextInput
+            label="Script Name *"
+            placeholder="my_awesome_script"
+            description="No spaces or special characters. Use underscores."
+            {...form.getInputProps('scriptName')}
+            required
+          />
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Description
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-blue-500"
-              placeholder="What does this script do?"
-            />
-          </div>
+          <TextInput
+            label="Description"
+            placeholder="What does this script do?"
+            {...form.getInputProps('description')}
+          />
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Author
-            </label>
-            <input
-              type="text"
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-blue-500"
-              placeholder="Your name"
-            />
-          </div>
+          <TextInput
+            label="Author"
+            placeholder="Your name"
+            {...form.getInputProps('author')}
+          />
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Python Code *
-            </label>
-            <textarea
-              value={scriptContent}
-              onChange={(e) => handleCodeChange(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:border-blue-500"
-              rows={15}
-              placeholder="# Write your Python code here&#10;import requests&#10;&#10;def main():&#10;    print('Hello, World!')&#10;&#10;if __name__ == '__main__':&#10;    main()"
-              required
-            />
-          </div>
+          <Textarea
+            label="Python Code *"
+            placeholder={`# Write your Python code here
+import requests
+
+def main():
+    print('Hello, World!')
+
+if __name__ == '__main__':
+    main()`}
+            minRows={15}
+            {...form.getInputProps('scriptContent')}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            required
+          />
 
           {detectedDeps.length > 0 && (
-            <div className="bg-gray-700 border border-gray-600 rounded p-4">
-              <h3 className="font-medium mb-2">🔍 Detected Dependencies</h3>
-              <div className="flex flex-wrap gap-2">
+            <Stack gap="sm">
+              <Text fw={500}>🔍 Detected Dependencies</Text>
+              <Group>
                 {detectedDeps.map((dep) => (
-                  <span
-                    key={dep}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm"
-                  >
+                  <Badge key={dep} color="blue">
                     {dep}
-                  </span>
+                  </Badge>
                 ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
+              </Group>
+              <Text size="xs" c="dimmed">
                 These will be added to requirements.txt
-              </p>
-            </div>
+              </Text>
+            </Stack>
           )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded font-medium transition-all"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Adding Script...
-                </span>
-              ) : (
-                '✨ Add Script & Push to GitHub'
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded font-medium transition-colors disabled:opacity-50"
-            >
+          <Group justify="flex-end" mt="md">
+            <Button variant="default" onClick={onClose} disabled={isSubmitting}>
               Cancel
-            </button>
-          </div>
+            </Button>
+            <Button
+              type="submit"
+              loading={isSubmitting}
+              color="blue"
+            >
+              ✨ Add Script & Push to GitHub
+            </Button>
+          </Group>
 
-          <p className="text-xs text-gray-500 text-center">
+          <Text size="xs" c="dimmed" ta="center">
             Script will be saved locally and automatically pushed to GitHub
-          </p>
-        </form>
-      </motion.div>
-    </motion.div>
+          </Text>
+        </Stack>
+      </form>
+    </Modal>
   );
 };

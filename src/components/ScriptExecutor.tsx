@@ -2,8 +2,9 @@ import { useState } from "react";
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Play, Square, AlertTriangle } from "lucide-react";
+import { Play, Square } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
+import { Stack, Button, TextInput, Alert, Group, Text, Code, List } from '@mantine/core';
 
 interface ScriptExecutorProps {
   script: string;
@@ -55,68 +56,56 @@ export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps
   };
 
   return (
-    <motion.div className="script-executor bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
-      <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">{script}</h2>
-
-      {compatibilityWarning.length > 0 && (
-        <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-600 rounded flex gap-3">
-          <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0" size={20} />
-          <div>
-            <p className="font-semibold text-yellow-800 dark:text-yellow-200">Platform Compatibility Warning</p>
-            <ul className="text-sm text-yellow-700 dark:text-yellow-300 mt-2">
-              {compatibilityWarning.map((issue, idx) => (
-                <li key={idx}>• {issue}</li>
-              ))}
-            </ul>
-            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">This script may not work correctly on your system.</p>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3 mb-4">
+    <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
+      <Stack gap="md">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Arguments (optional)
-          </label>
-          <input
-            type="text"
+          <Text size="lg" fw={700}>{script}</Text>
+        </div>
+
+        {compatibilityWarning.length > 0 && (
+          <Alert color="yellow" title="Platform Compatibility Warning">
+            <Stack gap="sm">
+              <Text size="sm">This script contains Windows-specific libraries:</Text>
+              <List type="unordered" withPadding>
+                {compatibilityWarning.map((issue, idx) => (
+                  <List.Item key={idx}>{issue}</List.Item>
+                ))}
+              </List>
+              <Text size="xs">This script may not work correctly on your system.</Text>
+            </Stack>
+          </Alert>
+        )}
+
+        <div>
+          <TextInput
+            label="Arguments (optional)"
+            placeholder="e.g., --date 2024-01-01 --input file.txt"
             value={scriptArgs}
             onChange={(e) => setScriptArgs(e.target.value)}
-            placeholder="e.g., --date 2024-01-01 --input file.txt"
             disabled={isRunning}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
-      </div>
 
-      <div className="executor-controls mb-4">
-        <motion.button
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all ${
-            isRunning
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-green-600 hover:bg-green-700 text-white"
-          } disabled:opacity-50`}
-          onClick={handleRun}
-          disabled={isRunning}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          {isRunning ? (
-            <>
-              <Square size={18} /> {t('buttons.cancel')}
-            </>
-          ) : (
-            <>
-              <Play size={18} /> {t('buttons.run')}
-            </>
-          )}
-        </motion.button>
-      </div>
+        <Group>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={handleRun}
+              disabled={isRunning}
+              color={isRunning ? "red" : "green"}
+              leftSection={isRunning ? <Square size={18} /> : <Play size={18} />}
+            >
+              {isRunning ? t('buttons.cancel') : t('buttons.run')}
+            </Button>
+          </motion.div>
+        </Group>
 
-      <div className="output-section">
-        <h3 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">{t('dashboard.output')}</h3>
-        <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-96 font-mono text-sm">{output}</pre>
-      </div>
+        <div>
+          <Text fw={600} mb="xs">{t('dashboard.output')}</Text>
+          <Code block p="md" style={{ whiteSpace: 'pre-wrap', maxHeight: '400px', overflow: 'auto' }}>
+            {output}
+          </Code>
+        </div>
+      </Stack>
     </motion.div>
   );
 }
