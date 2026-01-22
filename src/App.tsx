@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import { AppShell, Tabs, Alert, Button, Stack, Group } from "@mantine/core";
 import Dashboard from "./components/Dashboard";
 import ScriptList from "./components/ScriptList";
 import ScriptExecutor from "./components/ScriptExecutor";
@@ -214,94 +215,77 @@ export default function App() {
   // Jeśli brak klucza administratora - pokaż app w user mode (read-only)
   if (!isAdmin) {
     return (
-      <div className="app-container dark:bg-gray-900 dark:text-white">
-        <header className="app-header bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-          <div className="flex items-center justify-between">
+      <AppShell
+        header={{ height: 120 }}
+        navbar={{ width: 300, breakpoint: "sm", collapsed: { mobile: true } }}
+        padding="md"
+      >
+        <AppShell.Header className="dark:bg-gray-800 border-b dark:border-gray-700">
+          <div className="flex items-center justify-between h-full px-4">
             <div>
               <h1>🚀 {t('app.title')} <span className="text-sm text-gray-500">(User Mode)</span></h1>
               <p className="text-gray-600 dark:text-gray-400">{t('app.subtitle')}</p>
             </div>
             <DarkModeToggle />
           </div>
-        </header>
+        </AppShell.Header>
 
-        <nav className="app-nav bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-3 flex gap-2 flex-wrap">
-          <button
-            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "dashboard"
-                ? "bg-blue-600 text-white"
-                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("dashboard")}
-          >
-            {t('nav.dashboard')}
-          </button>
-          <button
-            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "scripts"
-                ? "bg-blue-600 text-white"
-                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("scripts")}
-          >
-            {t('nav.scripts')}
-          </button>
-          <button
-            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "history"
-                ? "bg-blue-600 text-white"
-                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("history")}
-          >
-            {t('nav.history')}
-          </button>
-        </nav>
+        <AppShell.Main>
+          <Tabs value={activeTab} onChange={(value) => setActiveTab(value as any)} className="w-full">
+            <Tabs.List className="mb-4 flex flex-wrap gap-2">
+              <Tabs.Tab value="dashboard">{t('nav.dashboard')}</Tabs.Tab>
+              <Tabs.Tab value="scripts">{t('nav.scripts')}</Tabs.Tab>
+              <Tabs.Tab value="history">{t('nav.history')}</Tabs.Tab>
+            </Tabs.List>
 
-        <main className="app-main p-4">
-          {activeTab === "dashboard" && (
-            <Dashboard
-              scripts={scripts}
-              officialScripts={officialScripts}
-              onAddScript={() => setShowAddScript(true)}
-              isAdmin={false}
-            />
-          )}
-          {activeTab === "scripts" && (
-            <div className="scripts-section space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div className="flex-1 md:max-w-md">
-                  <SearchBox onSearch={setScriptSearch} />
+            <Tabs.Panel value="dashboard">
+              <Dashboard
+                scripts={scripts}
+                officialScripts={officialScripts}
+                onAddScript={() => setShowAddScript(true)}
+                isAdmin={false}
+              />
+            </Tabs.Panel>
+
+            <Tabs.Panel value="scripts">
+              <div className="scripts-section space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="flex-1 md:max-w-md">
+                    <SearchBox onSearch={setScriptSearch} />
+                  </div>
+                  <Button
+                    onClick={() => setShowAddScript(true)}
+                    color="blue"
+                  >
+                    {t('scripts.addScript')}
+                  </Button>
                 </div>
-                <button
-                  onClick={() => setShowAddScript(true)}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  {t('scripts.addScript')}
-                </button>
+
+                <ScriptList
+                  title={t('scripts.officialScripts')}
+                  scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                  emptyText={t('scripts.noScripts')}
+                  selected={selectedScript}
+                  onSelect={setSelectedScript}
+                  viewMode={viewMode}
+                />
+
+                <ScriptList
+                  title={t('scripts.userScripts')}
+                  scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                  selected={selectedScript}
+                  onSelect={setSelectedScript}
+                  emptyText={t('scripts.noScripts')}
+                  viewMode={viewMode}
+                  onDelete={(s) => deleteScript(s, "scripts")}
+                />
               </div>
+            </Tabs.Panel>
 
-              <ScriptList
-                title={t('scripts.officialScripts')}
-                scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
-                emptyText={t('scripts.noScripts')}
-                selected={selectedScript}
-                onSelect={setSelectedScript}
-                viewMode={viewMode}
-              />
-
-              <ScriptList
-                title={t('scripts.userScripts')}
-                scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
-                selected={selectedScript}
-                onSelect={setSelectedScript}
-                emptyText={t('scripts.noScripts')}
-                viewMode={viewMode}
-                onDelete={(s) => deleteScript(s, "scripts")}
-              />
-            </div>
-          )}
-          {activeTab === "history" && <History />}
+            <Tabs.Panel value="history">
+              <History />
+            </Tabs.Panel>
+          </Tabs>
 
           {selectedScript && (
             <motion.div className="mt-6" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
@@ -325,191 +309,153 @@ export default function App() {
               scriptsDir={scriptsDir}
             />
           )}
-        </main>
-      </div>
+        </AppShell.Main>
+      </AppShell>
     );
   }
 
   return (
-    <div className="app-container dark:bg-gray-900 dark:text-white">
-      <header className="app-header bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-        <div className="flex items-center justify-between">
+    <AppShell
+      header={{ height: 120 }}
+      padding="md"
+    >
+      <AppShell.Header className="dark:bg-gray-800 border-b dark:border-gray-700">
+        <div className="flex items-center justify-between h-full px-4">
           <div>
             <h1>🚀 {t('app.title')}</h1>
             <p className="text-gray-600 dark:text-gray-400">{t('app.subtitle')}</p>
           </div>
           <DarkModeToggle />
         </div>
-      </header>
+      </AppShell.Header>
 
-      {errorMessage && (
-        <div className="bg-yellow-100 dark:bg-yellow-900 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-200 p-4 mx-4 mt-4 rounded">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium">{errorMessage}</p>
-            </div>
-            <button 
-              onClick={() => setErrorMessage("")}
-              className="ml-auto flex-shrink-0 text-yellow-500 hover:text-yellow-600"
-            >
-              <span className="sr-only">Dismiss</span>
-              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
-      <nav className="app-nav flex gap-2 bg-gray-100 dark:bg-gray-800 p-4 border-b dark:border-gray-700">
-        <button
-          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "dashboard"
-              ? "bg-blue-600 text-white"
-              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-          }`}
-          onClick={() => setActiveTab("dashboard")}
-        >
-          {t('nav.dashboard')}
-        </button>
-        <button
-          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "scripts"
-              ? "bg-blue-600 text-white"
-              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-          }`}
-          onClick={() => setActiveTab("scripts")}
-        >
-          {t('nav.scripts')}
-        </button>
-        <button
-          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "history"
-              ? "bg-blue-600 text-white"
-              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-          }`}
-          onClick={() => setActiveTab("history")}
-        >
-          {t('nav.history')}
-        </button>
-        <button
-          className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "logs"
-              ? "bg-blue-600 text-white"
-              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-          }`}
-          onClick={() => setActiveTab("logs")}
-        >
-          {t('logs.title')}
-        </button>
-      </nav>
-
-      <main className="app-main p-4">
-        {activeTab === "dashboard" && (
-          <Dashboard
-            scripts={scripts}
-            officialScripts={officialScripts}
-            onAddScript={() => isAdmin && setShowAddScript(true)}
-            isAdmin={isAdmin}
-          />
+      <AppShell.Main>
+        {errorMessage && (
+          <Alert 
+            title="Error" 
+            color="yellow"
+            mb="md"
+            withCloseButton
+            onClose={() => setErrorMessage("")}
+          >
+            {errorMessage}
+          </Alert>
         )}
-        {activeTab === "scripts" && (
-          <div className="scripts-section space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  className={`px-3 py-2 rounded-lg border dark:border-gray-700 ${
-                    viewMode === "list" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100"
-                  }`}
-                  onClick={() => setViewMode("list")}
-                >
-                  {t('scripts.viewList')}
-                </button>
-                <button
-                  className={`px-3 py-2 rounded-lg border dark:border-gray-700 ${
-                    viewMode === "grid" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100"
-                  }`}
-                  onClick={() => setViewMode("grid")}
-                >
-                  {t('scripts.viewGrid')}
-                </button>
+
+        <Tabs value={activeTab} onChange={(value) => setActiveTab(value as any)} className="w-full">
+          <Tabs.List className="mb-4 flex flex-wrap gap-2">
+            <Tabs.Tab value="dashboard">{t('nav.dashboard')}</Tabs.Tab>
+            <Tabs.Tab value="scripts">{t('nav.scripts')}</Tabs.Tab>
+            <Tabs.Tab value="history">{t('nav.history')}</Tabs.Tab>
+            <Tabs.Tab value="logs">{t('logs.title')}</Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="dashboard">
+            <Dashboard
+              scripts={scripts}
+              officialScripts={officialScripts}
+              onAddScript={() => isAdmin && setShowAddScript(true)}
+              isAdmin={isAdmin}
+            />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="scripts">
+            <div className="scripts-section space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <Group>
+                  <Button
+                    variant={viewMode === "list" ? "filled" : "default"}
+                    color="blue"
+                    onClick={() => setViewMode("list")}
+                  >
+                    {t('scripts.viewList')}
+                  </Button>
+                  <Button
+                    variant={viewMode === "grid" ? "filled" : "default"}
+                    color="blue"
+                    onClick={() => setViewMode("grid")}
+                  >
+                    {t('scripts.viewGrid')}
+                  </Button>
+                </Group>
+                <div className="flex-1 md:max-w-md">
+                  <SearchBox onSearch={setScriptSearch} />
+                </div>
+                {isAdmin && (
+                  <Button
+                    onClick={() => setShowAddScript(true)}
+                    color="blue"
+                  >
+                    {t('scripts.addScript')}
+                  </Button>
+                )}
               </div>
-              <div className="flex-1 md:max-w-md">
-                <SearchBox onSearch={setScriptSearch} />
-              </div>
+
               {isAdmin && (
-                <button
-                  onClick={() => setShowAddScript(true)}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  {t('scripts.addScript')}
-                </button>
+                <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
+              )}
+
+              <ScriptList
+                title={t('scripts.officialScripts')}
+                scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                emptyText={t('scripts.noScripts')}
+                selected={selectedScript}
+                onSelect={setSelectedScript}
+                onDelete={isAdmin ? (s) => deleteScript(s, "official") : undefined}
+                onEncrypt={isAdmin ? encryptScript : undefined}
+                viewMode={viewMode}
+              />
+
+              <ScriptList
+                title={t('scripts.userScripts')}
+                scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                selected={selectedScript}
+                onSelect={setSelectedScript}
+                onDelete={isAdmin ? (s) => deleteScript(s, "scripts") : undefined}
+                emptyText={t('scripts.noScripts')}
+                viewMode={viewMode}
+              />
+
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {t('scripts.clickToRun', { defaultValue: 'Kliknij skrypt, aby uruchomić' })}
+              </p>
+
+              {selectedScript && (
+                <ScriptExecutor script={selectedScript} onOutput={setOutput} />
               )}
             </div>
+          </Tabs.Panel>
 
-            {isAdmin && (
-              <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
-            )}
+          <Tabs.Panel value="history">
+            <History />
+          </Tabs.Panel>
 
-            <ScriptList
-              title={t('scripts.officialScripts')}
-              scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
-              emptyText={t('scripts.noScripts')}
-              selected={selectedScript}
-              onSelect={setSelectedScript}
-              onDelete={isAdmin ? (s) => deleteScript(s, "official") : undefined}
-              onEncrypt={isAdmin ? encryptScript : undefined}
-              viewMode={viewMode}
-            />
-
-            <ScriptList
-              title={t('scripts.userScripts')}
-              scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
-              selected={selectedScript}
-              onSelect={setSelectedScript}
-              onDelete={isAdmin ? (s) => deleteScript(s, "scripts") : undefined}
-              emptyText={t('scripts.noScripts')}
-              viewMode={viewMode}
-            />
-
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {t('scripts.clickToRun', { defaultValue: 'Kliknij skrypt, aby uruchomić' })}
-            </p>
-
+          <Tabs.Panel value="logs">
             {selectedScript && (
-              <ScriptExecutor script={selectedScript} onOutput={setOutput} />
+              <LogViewer scriptName={selectedScript} />
             )}
-          </div>
-        )}
-        {activeTab === "history" && <History />}
-        {activeTab === "logs" && selectedScript && (
-          <LogViewer scriptName={selectedScript} />
-        )}
-      </main>
+          </Tabs.Panel>
+        </Tabs>
 
-      {showAddScript && (
-        <AddScript
-          onScriptAdded={handleScriptAdded}
-          onClose={() => setShowAddScript(false)}
-          scriptsDir={scriptsDir}
-        />
-      )}
+        {showAddScript && (
+          <AddScript
+            onScriptAdded={handleScriptAdded}
+            onClose={() => setShowAddScript(false)}
+            scriptsDir={scriptsDir}
+          />
+        )}
 
-      {output && (
-        <motion.div
-          className="output-panel bg-gray-900 text-gray-100 rounded-lg border dark:border-gray-700"
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-        >
-          <h3 className="font-bold p-4 border-b dark:border-gray-700">{t('dashboard.output')}</h3>
-          <pre className="p-4 overflow-auto max-h-60">{output}</pre>
-        </motion.div>
-      )}
-    </div>
+        {output && (
+          <motion.div
+            className="output-panel bg-gray-900 text-gray-100 rounded-lg border dark:border-gray-700 mt-6"
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+          >
+            <h3 className="font-bold p-4 border-b dark:border-gray-700">{t('dashboard.output')}</h3>
+            <pre className="p-4 overflow-auto max-h-60">{output}</pre>
+          </motion.div>
+        )}
+      </AppShell.Main>
+    </AppShell>
   );
 }
