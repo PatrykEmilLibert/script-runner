@@ -23,6 +23,8 @@ fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     // Image & Media
     map.insert("PIL", "Pillow");
     map.insert("Image", "Pillow");
+    map.insert("docx", "python-docx");
+    map.insert("pptx", "python-pptx");
     
     // Configuration & Data Formats
     map.insert("yaml", "pyyaml");
@@ -265,12 +267,25 @@ fn is_stdlib(module: &str) -> bool {
 }
 
 fn filter_stdlib_from_requirements(content: &str) -> Vec<String> {
+    let import_map = get_import_to_package_map();
+    
     content
         .lines()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .filter(|line| !is_stdlib(line))
-        .map(|s| s.to_string())
+        .map(|s| {
+            // Extract package name (without version specifiers)
+            let package = s
+                .split(|c: char| c == '=' || c == '>' || c == '<' || c == '!' || c == '[' || c == ' ')
+                .next()
+                .unwrap_or(s)
+                .trim();
+            
+            // Map import name to pip package name if needed
+            let mapped = import_map.get(package).copied().unwrap_or(package);
+            mapped.to_string()
+        })
         .collect()
 }
 
@@ -553,9 +568,26 @@ pub async fn install_dependencies(
         return Ok(());
     }
 
+    let import_map = get_import_to_package_map();
+    
+    // Map package names in case they're import names instead of pip names
+    let mapped_packages: Vec<String> = packages
+        .iter()
+        .map(|pkg| {
+            let package = pkg
+                .split(|c: char| c == '=' || c == '>' || c == '<' || c == '!' || c == '[' || c == ' ')
+                .next()
+                .unwrap_or(pkg)
+                .trim();
+            
+            let mapped = import_map.get(package).copied().unwrap_or(package);
+            mapped.to_string()
+        })
+        .collect();
+
     let output = Command::new(python_exec)
         .args(&["-m", "pip", "install"])
-        .args(packages)
+        .args(&mapped_packages)
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
 
