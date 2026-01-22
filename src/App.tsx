@@ -211,11 +211,101 @@ export default function App() {
     );
   }
 
-  // Jeśli brak klucza administratora - pokaż formularz generowania
+  // Jeśli brak klucza administratora - pokaż app w user mode (read-only)
   if (!isAdmin) {
     return (
-      <div className="app-container dark:bg-gray-900 dark:text-white flex items-center justify-center min-h-screen">
-        <GenerateAdminKey onGenerated={() => window.location.reload()} />
+      <div className="app-container dark:bg-gray-900 dark:text-white">
+        <header className="app-header bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1>🚀 {t('app.title')} <span className="text-sm text-gray-500">(User Mode)</span></h1>
+              <p className="text-gray-600 dark:text-gray-400">{t('app.subtitle')}</p>
+            </div>
+            <DarkModeToggle />
+          </div>
+        </header>
+
+        <nav className="app-nav bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-3 flex gap-2 flex-wrap">
+          <button
+            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "dashboard"
+                ? "bg-blue-600 text-white"
+                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            {t('nav.dashboard')}
+          </button>
+          <button
+            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "scripts"
+                ? "bg-blue-600 text-white"
+                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+            onClick={() => setActiveTab("scripts")}
+          >
+            {t('nav.scripts')}
+          </button>
+          <button
+            className={`nav-btn px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "history"
+                ? "bg-blue-600 text-white"
+                : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+            onClick={() => setActiveTab("history")}
+          >
+            {t('nav.history')}
+          </button>
+        </nav>
+
+        <main className="app-main p-4">
+          {activeTab === "dashboard" && (
+            <Dashboard
+              scripts={scripts}
+              officialScripts={officialScripts}
+              onAddScript={() => {}}
+              isAdmin={false}
+            />
+          )}
+          {activeTab === "scripts" && (
+            <div className="scripts-section space-y-4">
+              <div className="flex-1 md:max-w-md">
+                <SearchBox onSearch={setScriptSearch} />
+              </div>
+
+              <ScriptList
+                title={t('scripts.officialScripts')}
+                scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                emptyText={t('scripts.noScripts')}
+                selected={selectedScript}
+                onSelect={setSelectedScript}
+                viewMode={viewMode}
+              />
+
+              <ScriptList
+                title={t('scripts.userScripts')}
+                scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
+                selected={selectedScript}
+                onSelect={setSelectedScript}
+                emptyText={t('scripts.noScripts')}
+                viewMode={viewMode}
+              />
+            </div>
+          )}
+          {activeTab === "history" && <History />}
+
+          {selectedScript && (
+            <motion.div className="mt-6" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+              <ScriptExecutor
+                script={selectedScript}
+                onOutput={(output: string) => {
+                  setOutput(output);
+                  setActiveTab("scripts");
+                }}
+              />
+            </motion.div>
+          )}
+        </main>
       </div>
     );
   }
