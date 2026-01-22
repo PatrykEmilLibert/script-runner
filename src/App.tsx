@@ -7,16 +7,20 @@ import ScriptList from "./components/ScriptList";
 import ScriptExecutor from "./components/ScriptExecutor";
 import LogViewer from "./components/LogViewer";
 import History from "./components/History";
+import SearchBox from "./components/SearchBox";
 import { AddScript } from "./components/AddScript";
 import { AdminDropzone } from "./components/AdminDropzone";
 import GenerateAdminKey from "./components/GenerateAdminKey";
 import DarkModeToggle from "./components/DarkModeToggle";
+import { useNotifications } from "./hooks/useNotifications";
 import "./App.css";
 
 export default function App() {
   const { t } = useTranslation();
+  const { sendNotification } = useNotifications();
   const [appBlocked, setAppBlocked] = useState(false);
   const [networkError, setNetworkError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [scripts, setScripts] = useState<string[]>([]);
   const [selectedScript, setSelectedScript] = useState<string | null>(null);
   const [output, setOutput] = useState("");
@@ -29,6 +33,10 @@ export default function App() {
   const [officialScripts, setOfficialScripts] = useState<string[]>([]);
   const [scriptSearch, setScriptSearch] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  useEffect(() => {
+    console.log("[APP] Render - activeTab:", activeTab, "isAdmin:", isAdmin);
+  }, [activeTab, isAdmin]);
 
   useEffect(() => {
     const initApp = async () => {
@@ -54,21 +62,43 @@ export default function App() {
         const dir: string = await invoke("get_scripts_dir");
         setScriptsDir(dir);
         setOfficialDir(dir);
+        console.log("Scripts directory:", dir);
 
         // Sync scripts from GitHub (clone if missing)
-        await invoke("sync_scripts");
+        try {
+          const syncResult: string = await invoke("sync_scripts");
+          console.log("Sync result:", syncResult);
+          
+          // Check for new scripts notification
+          if (syncResult.includes("|new_scripts:")) {
+            const parts = syncResult.split("|new_scripts:");
+            const newCount = parseInt(parts[1]);
+            if (newCount > 0) {
+              await sendNotification(
+                "New Scripts Available!",
+                `${newCount} new script${newCount > 1 ? 's' : ''} added to your library`
+              );
+            }
+          }
+        } catch (syncError) {
+          console.error("Sync error:", syncError);
+          // Don't fail completely - maybe scripts are already present
+          setErrorMessage(`Warning: Could not sync scripts from GitHub: ${syncError}`);
+        }
 
         // List available scripts
         const scriptList: string[] = await invoke("list_scripts");
         setScripts(scriptList);
-        
-        // Load local scripts
-        await loadLocalScripts();
-        await loadOfficialScripts();
+        console.log("Found scripts:", scriptList);
+
+        // Load local scripts with the resolved path
+        await loadLocalScripts(dir);
+        await loadOfficialScripts(dir);
       } catch (error) {
         console.error("Initialization error:", error);
+        setErrorMessage(String(error));
         // Check if it's a network error
-        if (error && typeof error === 'string' && error.includes('internet')) {
+        if (error && typeof error === 'string' && (error.includes('internet') || error.includes('network') || error.includes('connection'))) {
           setNetworkError(true);
         }
       } finally {
@@ -79,10 +109,11 @@ export default function App() {
     initApp();
   }, []);
 
-  const loadLocalScripts = async () => {
+  const loadLocalScripts = async (baseDir?: string) => {
     try {
-      if (!scriptsDir) return;
-      const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir, subdir: "scripts" });
+      const dir = baseDir ?? scriptsDir;
+      if (!dir) return;
+      const localScripts: any[] = await invoke("get_local_scripts", { scriptsDir: dir, subdir: "scripts" });
       const names = localScripts.map((s: any) => s.name ?? "");
       setScripts(names);
     } catch (error) {
@@ -90,10 +121,11 @@ export default function App() {
     }
   };
 
-  const loadOfficialScripts = async () => {
+  const loadOfficialScripts = async (baseDir?: string) => {
     try {
-      if (!officialDir) return;
-      const items: any[] = await invoke("get_local_scripts", { scriptsDir: officialDir, subdir: "official" });
+      const dir = baseDir ?? officialDir;
+      if (!dir) return;
+      const items: any[] = await invoke("get_local_scripts", { scriptsDir: dir, subdir: "official" });
       const names = items.map((s: any) => s.name ?? "");
       setOfficialScripts(names);
     } catch (error) {
@@ -109,6 +141,27 @@ export default function App() {
     await loadOfficialScripts();
   };
 
+  const deleteScript = async (script: string, folder: "scripts" | "official") => {
+    const confirmMsg = t('scripts.deleteConfirm', { defaultValue: `Na pewno usunąć ${script}?` });
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await invoke("delete_script", { scriptName: script, scriptsDir, subdir: folder });
+      if (folder === "official") {
+        await loadOfficialScripts();
+      } else {
+        await loadLocalScripts();
+      }
+      if (selectedScript === script) {
+        setSelectedScript(null);
+      }
+    } catch (err) {
+      const msg = String(err);
+      setErrorMessage(msg);
+      console.error("Delete failed:", err);
+    }
+  };
+
   if (networkError) {
     return (
       <motion.div className="blocked-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -119,6 +172,24 @@ export default function App() {
       </motion.div>
     );
   }
+
+  const encryptScript = async (scriptName: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to encrypt "${scriptName}"?\n\nThis will:\n- Make the script unreadable outside the app\n- Prevent editing\n- Delete the original .py file\n\nThis action cannot be undone!`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const result: string = await invoke("encrypt_official_script", { scriptName });
+      console.log("Encrypt result:", result);
+      await loadOfficialScripts(officialDir);
+      await sendNotification("Script Encrypted", `${scriptName} is now protected`);
+    } catch (error) {
+      console.error("Encryption error:", error);
+      alert(`Failed to encrypt script: ${error}`);
+    }
+  };
 
   if (appBlocked) {
     return (
@@ -160,6 +231,30 @@ export default function App() {
           <DarkModeToggle />
         </div>
       </header>
+
+      {errorMessage && (
+        <div className="bg-yellow-100 dark:bg-yellow-900 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-200 p-4 mx-4 mt-4 rounded">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+            <button 
+              onClick={() => setErrorMessage("")}
+              className="ml-auto flex-shrink-0 text-yellow-500 hover:text-yellow-600"
+            >
+              <span className="sr-only">Dismiss</span>
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       <nav className="app-nav flex gap-2 bg-gray-100 dark:bg-gray-800 p-4 border-b dark:border-gray-700">
         <button
@@ -238,22 +333,27 @@ export default function App() {
                 <SearchBox onSearch={setScriptSearch} />
               </div>
               {isAdmin && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowAddScript(true)}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    {t('scripts.addScript')}
-                  </button>
-                  <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
-                </div>
+                <button
+                  onClick={() => setShowAddScript(true)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {t('scripts.addScript')}
+                </button>
               )}
             </div>
+
+            {isAdmin && (
+              <AdminDropzone onUploaded={handleOfficialAdded} scriptsDirOfficial={officialDir} />
+            )}
 
             <ScriptList
               title={t('scripts.officialScripts')}
               scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
               emptyText={t('scripts.noScripts')}
+              selected={selectedScript}
+              onSelect={setSelectedScript}
+              onDelete={isAdmin ? (s) => deleteScript(s, "official") : undefined}
+              onEncrypt={isAdmin ? encryptScript : undefined}
               viewMode={viewMode}
             />
 
@@ -262,9 +362,14 @@ export default function App() {
               scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
               selected={selectedScript}
               onSelect={setSelectedScript}
+              onDelete={isAdmin ? (s) => deleteScript(s, "scripts") : undefined}
               emptyText={t('scripts.noScripts')}
               viewMode={viewMode}
             />
+
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {t('scripts.clickToRun', { defaultValue: 'Kliknij skrypt, aby uruchomić' })}
+            </p>
 
             {selectedScript && (
               <ScriptExecutor script={selectedScript} onOutput={setOutput} />

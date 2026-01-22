@@ -21,15 +21,19 @@ pub async fn add_script(
     description: String,
     author: String,
     scripts_dir: String,
+    state: tauri::State<'_, crate::AppState>,
 ) -> Result<String, String> {
-    add_script_internal(
+    let result = add_script_internal(
         script_name,
         script_content,
         description,
         author,
-        scripts_dir,
+        scripts_dir.clone(),
         "scripts",
-    )
+    )?;
+    // Ensure all scripts' requirements are installed
+    crate::dependency_manager::ensure_all_scripts_requirements(&std::path::PathBuf::from(&scripts_dir), &state.python_exec).await?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -39,16 +43,67 @@ pub async fn add_official_script(
     description: String,
     author: String,
     scripts_dir: String,
+    state: tauri::State<'_, crate::AppState>,
 ) -> Result<String, String> {
     let script_name = file_name.trim_end_matches(".py").to_string();
-    add_script_internal(
+    let result = add_script_internal(
         script_name,
         file_content,
         description,
         author,
-        scripts_dir,
+        scripts_dir.clone(),
         "official",
-    )
+    )?;
+    // Ensure all scripts' requirements are installed
+    crate::dependency_manager::ensure_all_scripts_requirements(&std::path::PathBuf::from(&scripts_dir), &state.python_exec).await?;
+    Ok(result)
+}
+
+// Fallback dla drop z systemu plików (Tauri file-drop) – pobiera zawartość po ścieżce
+#[tauri::command]
+pub async fn add_official_script_from_path(
+    path: String,
+    description: String,
+    author: String,
+    scripts_dir: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let file_name = Path::new(&path)
+        .file_name()
+        .ok_or_else(|| "Nieprawidłowa ścieżka".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Nie można odczytać pliku: {e}"))?;
+
+    add_official_script(file_name, content, description, author, scripts_dir, state).await
+}
+
+#[tauri::command]
+pub async fn delete_script(
+    script_name: String,
+    scripts_dir: String,
+    subdir: Option<String>,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let folder = subdir.unwrap_or_else(|| "scripts".to_string());
+    let scripts_path = Path::new(&scripts_dir);
+    let script_dir = scripts_path.join(&folder).join(&script_name);
+
+    if !script_dir.exists() {
+        return Err("Script not found".to_string());
+    }
+
+    fs::remove_dir_all(&script_dir)
+        .map_err(|e| format!("Failed to remove script: {}", e))?;
+
+    commit_and_push(&scripts_path, &script_name)?;
+
+    // Ensure all scripts' requirements are installed (rebuild after deletion)
+    crate::dependency_manager::ensure_all_scripts_requirements(&std::path::PathBuf::from(&scripts_dir), &state.python_exec).await?;
+
+    Ok(format!("Script '{}' deleted successfully", script_name))
 }
 
 fn analyze_dependencies(script_content: &str) -> Result<Vec<String>, String> {

@@ -208,10 +208,9 @@ body.light {
 
 /* Scripts Section */
 .scripts-section {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 20px;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .script-list {
@@ -231,9 +230,7 @@ body.light {
 }
 
 .scripts-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  /* layout controlled by utility classes in components (grid/list) */
 }
 
 .script-item {

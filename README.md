@@ -34,11 +34,15 @@ A modern desktop application built with **Tauri + React** for executing Python s
 
 ## Requirements
 
-⚠️ **Internet connection required** - Application needs network access to:
+⚠️ **Internet connection required on first launch** - Application needs network access to:
+- Clone scripts repository from GitHub (first launch only)
 - Check kill switch status
-- Sync scripts from GitHub
 - Install Python dependencies
 - Auto-update the application
+
+ℹ️ **After first launch**: Scripts are cached locally and app works offline
+
+📂 **Script storage location**: See [SCRIPTS_LOCATION.md](SCRIPTS_LOCATION.md) for details
 
 ## Project Structure
 

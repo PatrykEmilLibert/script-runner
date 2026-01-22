@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default capability for ScriptRunner","local":true,"windows":["main"],"permissions":["core:event:allow-listen","core:event:allow-emit","dialog:allow-open","dialog:allow-message"]}}

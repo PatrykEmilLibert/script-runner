@@ -15,6 +15,7 @@ mod python_runner;
 mod script_manager;
 mod run_history;
 mod settings;
+mod script_encryption;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -28,18 +29,29 @@ fn resolve_scripts_dir() -> PathBuf {
         if p.exists() { return p; }
     }
 
-    // Prefer workspace-level repo outside src-tauri to avoid rebuild loops
-    let candidates = [
-        PathBuf::from("../../script-runner-scripts"),
-        PathBuf::from("../script-runner-scripts"),
-        PathBuf::from("./script-runner-scripts"),
-    ];
+    // In development: prefer workspace-level repo outside src-tauri to avoid rebuild loops
+    #[cfg(debug_assertions)]
+    {
+        let dev_candidates = [
+            PathBuf::from("../../script-runner-scripts"),
+            PathBuf::from("../script-runner-scripts"),
+            PathBuf::from("./script-runner-scripts"),
+        ];
 
-    for c in candidates.iter() {
-        if c.exists() { return c.clone(); }
+        for c in dev_candidates.iter() {
+            if c.exists() { return c.clone(); }
+        }
     }
 
-    // Fallback to local folder (will be created if syncing/cloning happens)
+    // In production: use user data directory (persistent across updates)
+    if let Some(data_dir) = dirs::data_dir() {
+        let app_data = data_dir.join("ScriptRunner").join("scripts");
+        log::info!("Using user data directory for scripts: {:?}", app_data);
+        return app_data;
+    }
+
+    // Final fallback (should rarely happen)
+    log::warn!("Could not determine data directory, using current directory");
     PathBuf::from("./script-runner-scripts")
 }
 
@@ -82,22 +94,66 @@ async fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn run_script(script_name: String, state: State<'_, AppState>) -> Result<String, String> {
+async fn run_script(
+    script_name: String,
+    args: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     let start_time = chrono::Utc::now();
-    let script_dir = state.scripts_dir.join(&script_name);
+    // Prefer user script; fall back to official if user copy not found
+    let user_dir = state.scripts_dir.join("scripts").join(&script_name);
+    let official_dir = state.scripts_dir.join("official").join(&script_name);
+
+    let script_dir = if user_dir.exists() {
+        log::info!("Using user script: {:?}", user_dir);
+        user_dir
+    } else if official_dir.exists() {
+        log::info!("Using official script: {:?}", official_dir);
+        official_dir
+    } else {
+        let err = format!("Script not found: {}", script_name);
+        log::error!("{}", err);
+        return Err(err);
+    };
+
+    // Check for encrypted or plain script
+    let main_enc = script_dir.join("main.py.enc");
     let main_py = script_dir.join("main.py");
+    
+    let script_path = if main_enc.exists() {
+        main_enc.clone()
+    } else if main_py.exists() {
+        main_py.clone()
+    } else {
+        return Err(format!("No script file found in {}", script_name));
+    };
 
     // Install deps from requirements.txt if present (cached by hash)
     dependency_manager::ensure_requirements(&script_dir, &state.python_exec).await?;
 
     // Fallback: auto-detect imports when no requirements.txt exists
+    // For encrypted scripts, decrypt to analyze dependencies
     if !script_dir.join("requirements.txt").exists() {
-        let deps = dependency_manager::detect_dependencies(&main_py).await?;
+        let content = if main_enc.exists() {
+            script_encryption::decrypt_script(&main_enc)?
+        } else {
+            std::fs::read_to_string(&main_py)
+                .map_err(|e| format!("Failed to read script: {}", e))?
+        };
+        
+        // Write temp file for analysis
+        let temp_analysis = std::env::temp_dir().join(format!("sr_analyze_{}.py", uuid::Uuid::new_v4()));
+        std::fs::write(&temp_analysis, content)
+            .map_err(|e| format!("Failed to write temp analysis file: {}", e))?;
+        
+        let deps = dependency_manager::detect_dependencies(&temp_analysis).await?;
         dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
+        
+        let _ = std::fs::remove_file(temp_analysis); // Cleanup
     }
 
     // Run script and capture history
-    let result = python_runner::execute_script(&main_py, &state.python_exec).await;
+    let result = python_runner::execute_script(&script_path, &state.python_exec, args).await;
     let end_time = chrono::Utc::now();
     let duration = end_time.signed_duration_since(start_time);
 
@@ -129,8 +185,47 @@ async fn update_all_dependencies(state: State<'_, AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
+async fn encrypt_official_script(
+    script_name: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let official_dir = state.scripts_dir.join("official").join(&script_name);
+    let main_py = official_dir.join("main.py");
+    
+    if !main_py.exists() {
+        return Err("Script not found".to_string());
+    }
+    
+    script_encryption::encrypt_script(&main_py)?;
+    Ok(format!("Script {} encrypted successfully", script_name))
+}
+
+#[tauri::command]
 fn list_scripts(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     git_manager::list_available_scripts(&state.scripts_dir)
+}
+
+#[tauri::command]
+fn check_script_compatibility(script_name: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let user_dir = state.scripts_dir.join("scripts").join(&script_name);
+    let official_dir = state.scripts_dir.join("official").join(&script_name);
+    
+    let script_dir = if user_dir.exists() { user_dir } else { official_dir };
+    
+    // Check for encrypted or plain script
+    let main_py = script_dir.join("main.py");
+    let main_enc = script_dir.join("main.py.enc");
+    
+    let content = if main_enc.exists() {
+        script_encryption::decrypt_script(&main_enc)?
+    } else if main_py.exists() {
+        std::fs::read_to_string(&main_py)
+            .map_err(|e| format!("Failed to read script: {}", e))?
+    } else {
+        return Err("Script not found".to_string());
+    };
+    
+    python_runner::check_platform_compatibility(&content)
 }
 
 #[tauri::command]
@@ -138,7 +233,23 @@ async fn get_script_logs(
     script_name: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let log_path = state.scripts_dir.join(format!("{}.log", script_name));
+    let user_log = state
+        .scripts_dir
+        .join("scripts")
+        .join(&script_name)
+        .join("main.log");
+
+    let official_log = state
+        .scripts_dir
+        .join("official")
+        .join(&script_name)
+        .join("main.log");
+
+    let log_path = if user_log.exists() {
+        user_log
+    } else {
+        official_log
+    };
 
     std::fs::read_to_string(log_path).map_err(|e| format!("Failed to read logs: {}", e))
 }
@@ -277,14 +388,18 @@ fn get_scripts_dir(state: State<'_, AppState>) -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             check_kill_switch,
             sync_scripts,
             run_script,
             list_scripts,
+            check_script_compatibility,
             get_script_logs,
             script_manager::add_script,
             script_manager::add_official_script,
+            script_manager::add_official_script_from_path,
+            script_manager::delete_script,
             script_manager::get_local_scripts,
             update_all_dependencies,
             check_admin_key,
@@ -294,7 +409,8 @@ fn main() {
             export_history_as_csv,
             toggle_dark_mode,
             get_settings,
-            get_scripts_dir
+            get_scripts_dir,
+            encrypt_official_script
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]

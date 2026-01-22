@@ -1,10 +1,14 @@
 import { motion } from "framer-motion";
+import { Play, Trash, Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ScriptListProps {
   title: string;
   scripts: string[];
   selected?: string | null;
   onSelect?: (script: string) => void;
+  onDelete?: (script: string) => void;
+  onEncrypt?: (script: string) => void;
   emptyText?: string;
   viewMode?: "list" | "grid";
 }
@@ -14,9 +18,13 @@ export default function ScriptList({
   scripts,
   selected = null,
   onSelect,
+  onDelete,
+  onEncrypt,
   emptyText = "Brak skryptów",
   viewMode = "list",
 }: ScriptListProps) {
+  const { t } = useTranslation();
+
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <motion.div className="script-list" initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
       {children}
@@ -53,7 +61,41 @@ export default function ScriptList({
             whileTap={{ scale: onSelect ? 0.98 : 1 }}
           >
             <span className="script-name text-left">{script}</span>
-            {onSelect && <span className="script-status text-blue-600">▶</span>}
+            <span className="flex items-center gap-2">
+              {onSelect && (
+                <span className="script-status inline-flex items-center gap-1 text-blue-600 font-semibold text-sm">
+                  <Play size={16} />
+                  {t("buttons.run", { defaultValue: "Uruchom" })}
+                </span>
+              )}
+              {onEncrypt && (
+                <button
+                  type="button"
+                  className="text-yellow-500 hover:text-yellow-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEncrypt(script);
+                  }}
+                  aria-label="Encrypt script"
+                  title="Encrypt this script to protect it from viewing/editing"
+                >
+                  <Lock size={16} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  className="text-red-500 hover:text-red-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(script);
+                  }}
+                  aria-label={t("buttons.delete", { defaultValue: "Usuń" })}
+                >
+                  <Trash size={16} />
+                </button>
+              )}
+            </span>
           </motion.button>
         ))}
       </div>

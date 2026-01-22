@@ -1,6 +1,6 @@
 {
   "productName": "ScriptRunner",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "identifier": "com.scriptrunner.app",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -15,7 +15,8 @@
         "height": 900,
         "resizable": true,
         "title": "ScriptRunner - Python Script Executor",
-        "width": 1400
+        "width": 1400,
+        "dragDropEnabled": true
       }
     ],
     "security": {
