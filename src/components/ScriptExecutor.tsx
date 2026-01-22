@@ -1,22 +1,26 @@
 import { useState } from "react";
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from "react-i18next";
-import { Play, Square } from "lucide-react";
+import { Play, Square, Edit2, Check, X } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
-import { Stack, Button, TextInput, Alert, Group, Text, Code, List } from '@mantine/core';
+import { Stack, Button, TextInput, Alert, Group, Text, Code, List, ActionIcon } from '@mantine/core';
 
 interface ScriptExecutorProps {
   script: string;
   onOutput: (output: string) => void;
+  customName?: string;
+  onUpdateName?: (name: string) => void;
 }
 
-export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps) {
+export default function ScriptExecutor({ script, onOutput, customName, onUpdateName }: ScriptExecutorProps) {
   const { t } = useTranslation();
   const { sendNotification } = useNotifications();
   const [isRunning, setIsRunning] = useState(false);
   const [output, setOutput] = useState("");
   const [compatibilityWarning, setCompatibilityWarning] = useState<string[]>([]);
   const [scriptArgs, setScriptArgs] = useState("");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
 
   const handleRun = async () => {
     // Check compatibility before running
@@ -54,11 +58,58 @@ export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps
     }
   };
 
+  const displayName = customName || script;
+
+  const startEditing = () => {
+    setEditedName(customName || script);
+    setIsEditingName(true);
+  };
+
+  const saveEdit = () => {
+    if (onUpdateName && editedName.trim()) {
+      onUpdateName(editedName.trim());
+    }
+    setIsEditingName(false);
+  };
+
+  const cancelEdit = () => {
+    setIsEditingName(false);
+    setEditedName("");
+  };
+
   return (
     <div>
       <Stack gap="md">
         <div>
-          <Text size="lg" fw={700}>{script}</Text>
+          {isEditingName ? (
+            <Group gap="xs">
+              <TextInput
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                  if (e.key === "Escape") cancelEdit();
+                }}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+              <ActionIcon onClick={saveEdit} color="green" variant="light">
+                <Check size={18} />
+              </ActionIcon>
+              <ActionIcon onClick={cancelEdit} color="red" variant="light">
+                <X size={18} />
+              </ActionIcon>
+            </Group>
+          ) : (
+            <Group gap="xs">
+              <Text size="lg" fw={700}>{displayName}</Text>
+              {onUpdateName && (
+                <ActionIcon onClick={startEditing} variant="subtle" size="sm">
+                  <Edit2 size={14} />
+                </ActionIcon>
+              )}
+            </Group>
+          )}
         </div>
 
         {compatibilityWarning.length > 0 && (

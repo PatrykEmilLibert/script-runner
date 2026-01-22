@@ -6,6 +6,7 @@
 use std::env;
 use std::path::PathBuf;
 use tauri::State;
+use serde_json;
 
 mod admin_key;
 mod dependency_manager;
@@ -386,6 +387,79 @@ fn get_scripts_dir(state: State<'_, AppState>) -> Result<String, String> {
     Ok(state.scripts_dir.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn check_for_updates() -> Result<bool, String> {
+    const CURRENT_VERSION: &str = "0.5.1";
+    
+    let client = reqwest::Client::new();
+    
+    match client
+        .get("https://api.github.com/repos/YOUR_GITHUB_USERNAME/python_runner_github/releases/latest")
+        .header("User-Agent", "ScriptRunner")
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if !response.status().is_success() {
+                log::warn!("GitHub API returned status: {}", response.status());
+                return Ok(false);
+            }
+
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
+                        let latest = tag.trim_start_matches('v');
+                        log::info!("Current version: {}, Latest version: {}", CURRENT_VERSION, latest);
+                        Ok(latest != CURRENT_VERSION && latest > CURRENT_VERSION)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse GitHub response: {}", e);
+                    Ok(false)
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to fetch updates from GitHub: {}", e);
+            Ok(false)
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_download_url() -> Result<String, String> {
+    let client = reqwest::Client::new();
+    
+    match client
+        .get("https://api.github.com/repos/YOUR_GITHUB_USERNAME/python_runner_github/releases/latest")
+        .header("User-Agent", "ScriptRunner")
+        .send()
+        .await
+    {
+        Ok(response) => {
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if let Some(url) = json.get("html_url").and_then(|v| v.as_str()) {
+                        Ok(url.to_string())
+                    } else {
+                        Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse GitHub response: {}", e);
+                    Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to fetch releases from GitHub: {}", e);
+            Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -410,7 +484,9 @@ fn main() {
             toggle_dark_mode,
             get_settings,
             get_scripts_dir,
-            encrypt_official_script
+            encrypt_official_script,
+            check_for_updates,
+            get_download_url
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]

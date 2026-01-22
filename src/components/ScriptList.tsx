@@ -10,7 +10,6 @@ interface ScriptListProps {
   onDelete?: (script: string) => void;
   onEncrypt?: (script: string) => void;
   emptyText?: string;
-  viewMode?: "list" | "grid";
 }
 
 export default function ScriptList({
@@ -21,7 +20,6 @@ export default function ScriptList({
   onDelete,
   onEncrypt,
   emptyText = "Brak skryptów",
-  viewMode = "list",
 }: ScriptListProps) {
   const { t } = useTranslation();
 
@@ -39,7 +37,7 @@ export default function ScriptList({
   const ScriptCard = ({ script }: { script: string }) => (
     <Card
       key={script}
-      p="md"
+      p="sm"
       radius="md"
       withBorder
       shadow={selected === script ? "md" : "xs"}
@@ -47,6 +45,10 @@ export default function ScriptList({
         cursor: onSelect ? "pointer" : "default",
         border: selected === script ? "2px solid #4dabf7" : undefined,
         transition: "all 0.2s ease",
+        minHeight: "80px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
       }}
       onClick={() => onSelect && onSelect(script)}
       onMouseEnter={(e) => {
@@ -60,63 +62,66 @@ export default function ScriptList({
         }
       }}
     >
-      <Group justify="space-between" wrap="nowrap">
-        <div style={{ flex: 1 }}>
-          <Text fw={500} size="sm">
-            {script}
-          </Text>
-        </div>
-        <Group gap="xs" wrap="nowrap">
+      <Stack gap="xs">
+        <Text fw={500} size="sm" lineClamp={2} style={{ wordBreak: "break-word" }}>
+          {script}
+        </Text>
+        <Group gap="xs" justify="center" wrap="wrap">
           {onSelect && (
-            <Badge leftSection={<Play size={12} />} variant="light" color="blue">
+            <Badge 
+              leftSection={<Play size={12} />} 
+              variant="light" 
+              color="blue"
+              size="xs"
+              style={{ cursor: "pointer" }}
+            >
               {t("buttons.run", { defaultValue: "Uruchom" })}
             </Badge>
           )}
           {onEncrypt && (
-            <Button
-              variant="subtle"
+            <Badge
+              variant="light"
               color="yellow"
               size="xs"
+              style={{ cursor: "pointer" }}
               onClick={(e) => {
                 e.stopPropagation();
                 onEncrypt(script);
               }}
-              aria-label="Encrypt script"
-              title="Encrypt this script to protect it from viewing/editing"
+              leftSection={<Lock size={12} />}
             >
-              <Lock size={16} />
-            </Button>
+              Encrypt
+            </Badge>
           )}
           {onDelete && (
-            <Button
-              variant="subtle"
+            <Badge
+              variant="light"
               color="red"
               size="xs"
+              style={{ cursor: "pointer" }}
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(script);
               }}
-              aria-label={t("buttons.delete", { defaultValue: "Usuń" })}
+              leftSection={<Trash size={12} />}
             >
-              <Trash size={16} />
-            </Button>
+              {t("buttons.delete", { defaultValue: "Usuń" })}
+            </Badge>
           )}
         </Group>
-      </Group>
+      </Stack>
     </Card>
   );
-
-  const layoutComponent = viewMode === "grid" ? SimpleGrid : Stack;
-  const layoutProps = viewMode === "grid" ? { cols: { base: 1, sm: 2, md: 3 }, spacing: "md" } : { gap: "md" };
 
   return (
     <Stack gap="md">
       <Title order={2}>{title}</Title>
-      {layoutComponent === SimpleGrid ? (
-        <SimpleGrid {...layoutProps}>{scripts.map((script) => <ScriptCard script={script} />)}</SimpleGrid>
-      ) : (
-        <Stack {...layoutProps}>{scripts.map((script) => <ScriptCard script={script} />)}</Stack>
-      )}
+      <SimpleGrid 
+        cols={{ base: 2, xs: 3, sm: 4, md: 5, lg: 6, xl: 7 }} 
+        spacing="md"
+      >
+        {scripts.map((script) => <ScriptCard key={script} script={script} />)}
+      </SimpleGrid>
     </Stack>
   );
 }

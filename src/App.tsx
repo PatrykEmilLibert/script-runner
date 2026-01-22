@@ -12,6 +12,7 @@ import { AddScript } from "./components/AddScript";
 import { AdminDropzone } from "./components/AdminDropzone";
 import GenerateAdminKey from "./components/GenerateAdminKey";
 import DarkModeToggle from "./components/DarkModeToggle";
+import { UpdateNotification } from "./components/UpdateNotification";
 import { useNotifications } from "./hooks/useNotifications";
 import "./App.css";
 
@@ -32,11 +33,29 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [officialScripts, setOfficialScripts] = useState<string[]>([]);
   const [scriptSearch, setScriptSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [customScriptNames, setCustomScriptNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     console.log("[APP] Render - activeTab:", activeTab, "isAdmin:", isAdmin);
   }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    // Load custom script names from localStorage
+    const saved = localStorage.getItem('customScriptNames');
+    if (saved) {
+      try {
+        setCustomScriptNames(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load custom script names:', e);
+      }
+    }
+  }, []);
+
+  const updateScriptName = (scriptId: string, customName: string) => {
+    const updated = { ...customScriptNames, [scriptId]: customName };
+    setCustomScriptNames(updated);
+    localStorage.setItem('customScriptNames', JSON.stringify(updated));
+  };
 
   useEffect(() => {
     const initApp = async () => {
@@ -217,7 +236,7 @@ export default function App() {
   if (!isAdmin) {
     return (
       <AppShell
-        header={{ height: 120 }}
+        header={{ height: selectedScript ? 180 : 120 }}
         navbar={{ width: 300, breakpoint: "sm", collapsed: { mobile: true } }}
         padding="md"
       >
@@ -229,6 +248,16 @@ export default function App() {
             </div>
             <DarkModeToggle />
           </div>
+          {selectedScript && (
+            <div style={{ padding: "0 1rem", paddingBottom: "0.5rem" }}>
+              <ScriptExecutor 
+                script={selectedScript} 
+                onOutput={setOutput}
+                customName={customScriptNames[selectedScript]}
+                onUpdateName={(name) => updateScriptName(selectedScript, name)}
+              />
+            </div>
+          )}
         </AppShell.Header>
 
         <AppShell.Main>
@@ -268,7 +297,6 @@ export default function App() {
                   emptyText={t('scripts.noScripts')}
                   selected={selectedScript}
                   onSelect={setSelectedScript}
-                  viewMode={viewMode}
                 />
 
                 <ScriptList
@@ -277,7 +305,6 @@ export default function App() {
                   selected={selectedScript}
                   onSelect={setSelectedScript}
                   emptyText={t('scripts.noScripts')}
-                  viewMode={viewMode}
                   onDelete={(s) => deleteScript(s, "scripts")}
                 />
               </div>
@@ -287,18 +314,6 @@ export default function App() {
               <History />
             </Tabs.Panel>
           </Tabs>
-
-          {selectedScript && (
-            <div className="mt-6">
-              <ScriptExecutor
-                script={selectedScript}
-                onOutput={(output: string) => {
-                  setOutput(output);
-                  setActiveTab("scripts");
-                }}
-              />
-            </div>
-          )}
 
           {showAddScript && (
             <AddScript
@@ -317,7 +332,7 @@ export default function App() {
 
   return (
     <AppShell
-      header={{ height: 120 }}
+      header={{ height: selectedScript ? 180 : 120 }}
       padding="md"
     >
       <AppShell.Header className="dark:bg-gray-800 border-b dark:border-gray-700">
@@ -328,6 +343,16 @@ export default function App() {
           </div>
           <DarkModeToggle />
         </div>
+        {selectedScript && (
+          <div style={{ padding: "0 1rem", paddingBottom: "0.5rem" }}>
+            <ScriptExecutor 
+              script={selectedScript} 
+              onOutput={setOutput}
+              customName={customScriptNames[selectedScript]}
+              onUpdateName={(name) => updateScriptName(selectedScript, name)}
+            />
+          </div>
+        )}
       </AppShell.Header>
 
       <AppShell.Main>
@@ -363,22 +388,6 @@ export default function App() {
           <Tabs.Panel value="scripts">
             <div className="scripts-section space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <Group>
-                  <Button
-                    variant={viewMode === "list" ? "filled" : "default"}
-                    color="blue"
-                    onClick={() => setViewMode("list")}
-                  >
-                    {t('scripts.viewList')}
-                  </Button>
-                  <Button
-                    variant={viewMode === "grid" ? "filled" : "default"}
-                    color="blue"
-                    onClick={() => setViewMode("grid")}
-                  >
-                    {t('scripts.viewGrid')}
-                  </Button>
-                </Group>
                 <div className="flex-1 md:max-w-md">
                   <SearchBox onSearch={setScriptSearch} />
                 </div>
@@ -404,7 +413,6 @@ export default function App() {
                 onSelect={setSelectedScript}
                 onDelete={isAdmin ? (s) => deleteScript(s, "official") : undefined}
                 onEncrypt={isAdmin ? encryptScript : undefined}
-                viewMode={viewMode}
               />
 
               <ScriptList
@@ -414,16 +422,7 @@ export default function App() {
                 onSelect={setSelectedScript}
                 onDelete={isAdmin ? (s) => deleteScript(s, "scripts") : undefined}
                 emptyText={t('scripts.noScripts')}
-                viewMode={viewMode}
               />
-
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {t('scripts.clickToRun', { defaultValue: 'Kliknij skrypt, aby uruchomić' })}
-              </p>
-
-              {selectedScript && (
-                <ScriptExecutor script={selectedScript} onOutput={setOutput} />
-              )}
             </div>
           </Tabs.Panel>
 
@@ -452,6 +451,8 @@ export default function App() {
             <pre className="p-4 overflow-auto max-h-60">{output}</pre>
           </div>
         )}
+
+        <UpdateNotification />
       </AppShell.Main>
     </AppShell>
   );

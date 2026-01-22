@@ -26,7 +26,7 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
 
   return (
     <Stack gap="lg">
-      <AdminKeyDiagnostics />
+      {isAdmin && <AdminKeyDiagnostics />}
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
         <StatCard icon={BarChart3} title="Total Scripts" value={scripts.length + officialScripts.length} />
