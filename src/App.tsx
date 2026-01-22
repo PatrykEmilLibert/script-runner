@@ -263,14 +263,22 @@ export default function App() {
             <Dashboard
               scripts={scripts}
               officialScripts={officialScripts}
-              onAddScript={() => {}}
+              onAddScript={() => setShowAddScript(true)}
               isAdmin={false}
             />
           )}
           {activeTab === "scripts" && (
             <div className="scripts-section space-y-4">
-              <div className="flex-1 md:max-w-md">
-                <SearchBox onSearch={setScriptSearch} />
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex-1 md:max-w-md">
+                  <SearchBox onSearch={setScriptSearch} />
+                </div>
+                <button
+                  onClick={() => setShowAddScript(true)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {t('scripts.addScript')}
+                </button>
               </div>
 
               <ScriptList
@@ -289,6 +297,7 @@ export default function App() {
                 onSelect={setSelectedScript}
                 emptyText={t('scripts.noScripts')}
                 viewMode={viewMode}
+                onDelete={(s) => deleteScript(s, "scripts")}
               />
             </div>
           )}
@@ -304,6 +313,17 @@ export default function App() {
                 }}
               />
             </motion.div>
+          )}
+
+          {showAddScript && (
+            <AddScript
+              onScriptAdded={() => {
+                setShowAddScript(false);
+                loadLocalScripts(scriptsDir);
+              }}
+              onClose={() => setShowAddScript(false)}
+              scriptsDir={scriptsDir}
+            />
           )}
         </main>
       </div>
