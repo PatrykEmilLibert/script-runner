@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { AppShell, Tabs, Alert, Button, Stack, Group } from "@mantine/core";
 import Dashboard from "./components/Dashboard";
@@ -165,12 +164,12 @@ export default function App() {
 
   if (networkError) {
     return (
-      <motion.div className="blocked-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <div className="blocked-content">
-          <h1>⚠️ {t('messages.errorOccurred')}</h1>
-          <p>{t('app.title')}</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 dark:bg-gray-950">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">⚠️ {t('messages.errorOccurred')}</h1>
+          <p className="text-gray-400">{t('app.title')}</p>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
@@ -194,21 +193,23 @@ export default function App() {
 
   if (appBlocked) {
     return (
-      <motion.div className="blocked-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <div className="blocked-content">
-          <h1>{t('app.title')}</h1>
-          <p>{t('messages.invalidAdminKey')}</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 dark:bg-gray-950">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">{t('app.title')}</h1>
+          <p className="text-gray-400">{t('messages.invalidAdminKey')}</p>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   if (isLoading) {
     return (
-      <motion.div className="loading-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <div className="spinner"></div>
-        <p>{t('app.loading')}</p>
-      </motion.div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 dark:bg-gray-950">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-gray-400">{t('app.loading')}</p>
+        </div>
+      </div>
     );
   }
 
@@ -288,7 +289,7 @@ export default function App() {
           </Tabs>
 
           {selectedScript && (
-            <motion.div className="mt-6" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+            <div className="mt-6">
               <ScriptExecutor
                 script={selectedScript}
                 onOutput={(output: string) => {
@@ -296,7 +297,7 @@ export default function App() {
                   setActiveTab("scripts");
                 }}
               />
-            </motion.div>
+            </div>
           )}
 
           {showAddScript && (
@@ -446,14 +447,10 @@ export default function App() {
         )}
 
         {output && (
-          <motion.div
-            className="output-panel bg-gray-900 text-gray-100 rounded-lg border dark:border-gray-700 mt-6"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-          >
+          <div className="output-panel bg-gray-900 text-gray-100 rounded-lg border dark:border-gray-700 mt-6">
             <h3 className="font-bold p-4 border-b dark:border-gray-700">{t('dashboard.output')}</h3>
             <pre className="p-4 overflow-auto max-h-60">{output}</pre>
-          </motion.div>
+          </div>
         )}
       </AppShell.Main>
     </AppShell>

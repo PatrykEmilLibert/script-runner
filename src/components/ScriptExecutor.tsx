@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { invoke } from '@tauri-apps/api/core';
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Play, Square } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
@@ -56,7 +55,7 @@ export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps
   };
 
   return (
-    <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
+    <div>
       <Stack gap="md">
         <div>
           <Text size="lg" fw={700}>{script}</Text>
@@ -87,16 +86,14 @@ export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps
         </div>
 
         <Group>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button
-              onClick={handleRun}
-              disabled={isRunning}
-              color={isRunning ? "red" : "green"}
-              leftSection={isRunning ? <Square size={18} /> : <Play size={18} />}
-            >
-              {isRunning ? t('buttons.cancel') : t('buttons.run')}
-            </Button>
-          </motion.div>
+          <Button
+            onClick={handleRun}
+            disabled={isRunning}
+            color={isRunning ? "red" : "green"}
+            leftSection={isRunning ? <Square size={18} /> : <Play size={18} />}
+          >
+            {isRunning ? t('buttons.cancel') : t('buttons.run')}
+          </Button>
         </Group>
 
         <div>
@@ -106,6 +103,6 @@ export default function ScriptExecutor({ script, onOutput }: ScriptExecutorProps
           </Code>
         </div>
       </Stack>
-    </motion.div>
+    </div>
   );
 }
