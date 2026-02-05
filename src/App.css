@@ -1,3 +1,6 @@
+/* Import pink theme utilities */
+@import './styles/pink-theme.css';
+
 /* App-specific styles using Mantine components */
 /* All colors and theming are now handled by Mantine */
 
@@ -38,6 +41,185 @@ code {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   PINK UTILITY CLASSES
+   ======================================== */
+
+/* Gradient Backgrounds */
+.gradient-pink-bg {
+  background: linear-gradient(135deg, #FF1493 0%, #C71585 50%, #9b59b6 100%);
+  position: relative;
+}
+
+.gradient-pink-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 20, 147, 0.1) 0%, rgba(199, 21, 133, 0.1) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gradient-pink-bg:hover::before {
+  opacity: 1;
+}
+
+/* Pink Glow Effect */
+.pink-glow {
+  box-shadow: 0 0 20px rgba(255, 20, 147, 0.3), 
+              0 0 40px rgba(255, 20, 147, 0.2);
+  transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-glow:hover {
+  box-shadow: 0 0 30px rgba(255, 20, 147, 0.5), 
+              0 0 60px rgba(255, 20, 147, 0.3);
+}
+
+/* Pink Card */
+.card-pink {
+  border: 2px solid #FFB6C1;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-pink:hover {
+  border-color: #FF1493;
+  box-shadow: 0 0 20px rgba(255, 20, 147, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Pink Primary Button */
+.btn-pink-primary {
+  background: linear-gradient(135deg, #FF1493 0%, #C71585 100%);
+  color: white;
+  border: none;
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px rgba(255, 20, 147, 0.2);
+}
+
+.btn-pink-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(255, 20, 147, 0.3), 
+              0 4px 12px rgba(255, 20, 147, 0.3);
+}
+
+.btn-pink-primary:active {
+  transform: translateY(0);
+}
+
+/* Hover Pink Effect */
+.hover-pink {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-pink:hover {
+  color: #FF1493;
+  background-color: rgba(255, 20, 147, 0.05);
+}
+
+/* ========================================
+   DARK MODE OVERRIDES
+   ======================================== */
+
+[data-mantine-color-scheme="dark"] .card-pink {
+  background: rgba(26, 27, 30, 0.95);
+  border-color: #C71585;
+}
+
+[data-mantine-color-scheme="dark"] .card-pink:hover {
+  border-color: #DB7093;
+  box-shadow: 0 0 25px rgba(199, 21, 133, 0.4);
+}
+
+[data-mantine-color-scheme="dark"] .gradient-pink-bg {
+  background: linear-gradient(135deg, #C71585 0%, #990C46 50%, #7b2d91 100%);
+}
+
+[data-mantine-color-scheme="dark"] .hover-pink:hover {
+  color: #DB7093;
+  background-color: rgba(199, 21, 133, 0.1);
+}
+
+/* ========================================
+   ADMIN PANEL ANIMATED BACKGROUNDS
+   ======================================== */
+
+.admin-panel-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-panel-bg::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 20, 147, 0.1) 0%, transparent 50%);
+  animation: adminPulse 10s ease-in-out infinite;
+}
+
+.admin-panel-bg::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(45deg, transparent 40%, rgba(255, 20, 147, 0.05) 50%, transparent 60%),
+    linear-gradient(-45deg, transparent 40%, rgba(199, 21, 133, 0.05) 50%, transparent 60%);
+  background-size: 100% 100%, 100% 100%;
+  animation: adminShimmer 15s linear infinite;
+}
+
+@keyframes adminPulse {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(10%, 10%) scale(1.1);
+    opacity: 0.5;
+  }
+}
+
+@keyframes adminShimmer {
+  0% {
+    background-position: 0% 0%, 100% 100%;
+  }
+  100% {
+    background-position: 100% 100%, 0% 0%;
+  }
+}
+
+/* Animated gradient text */
+.gradient-text-pink {
+  background: linear-gradient(135deg, #FF1493, #C71585, #FF1493);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% center;
+  }
+  50% {
+    background-position: 100% center;
   }
 }
 

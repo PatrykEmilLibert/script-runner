@@ -1,0 +1,471 @@
+/* ============================================
+   PINK THEME - GLASSMORPHISM & EFFECTS
+   ============================================ */
+
+/* Glassmorphism Base */
+.glass-pink {
+  background: rgba(255, 182, 193, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 20, 147, 0.2);
+  box-shadow: var(--shadow-pink-md);
+  transition: var(--transition-default);
+}
+
+.glass-pink:hover {
+  background: rgba(255, 182, 193, 0.15);
+  border-color: rgba(255, 20, 147, 0.3);
+  box-shadow: var(--shadow-pink-glow);
+  transform: translateY(-2px);
+}
+
+/* Dark Mode Glassmorphism */
+[data-theme="dark"] .glass-pink,
+.dark-mode .glass-pink,
+[data-mantine-color-scheme="dark"] .glass-pink {
+  background: rgba(219, 112, 147, 0.1);
+  border: 1px solid rgba(199, 21, 133, 0.3);
+}
+
+[data-theme="dark"] .glass-pink:hover,
+.dark-mode .glass-pink:hover,
+[data-mantine-color-scheme="dark"] .glass-pink:hover {
+  background: rgba(219, 112, 147, 0.15);
+  border-color: rgba(199, 21, 133, 0.5);
+}
+
+/* ============================================
+   BUTTON STYLES
+   ============================================ */
+
+.btn-pink {
+  background: var(--gradient-pink-sunset);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-pink-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-pink::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s;
+}
+
+.btn-pink:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pink-glow);
+}
+
+.btn-pink:hover::before {
+  left: 100%;
+}
+
+.btn-pink:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-pink-sm);
+}
+
+.btn-pink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Outline Pink Button */
+.btn-pink-outline {
+  background: transparent;
+  color: var(--pink-primary);
+  border: 2px solid var(--pink-primary);
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+
+.btn-pink-outline:hover {
+  background: var(--pink-primary);
+  color: white;
+  box-shadow: var(--shadow-pink-glow);
+  transform: translateY(-2px);
+}
+
+/* Ghost Pink Button */
+.btn-pink-ghost {
+  background: transparent;
+  color: var(--pink-primary);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+
+.btn-pink-ghost:hover {
+  background: rgba(255, 20, 147, 0.1);
+  transform: translateX(4px);
+}
+
+/* ============================================
+   CARD STYLES
+   ============================================ */
+
+.card-pink {
+  background: var(--bg-primary);
+  border: 2px solid var(--pink-light);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-pink-sm);
+}
+
+.card-pink:hover {
+  border-color: var(--pink-primary);
+  box-shadow: var(--shadow-pink-glow);
+  transform: translateY(-4px);
+}
+
+/* Glass Card */
+.card-pink-glass {
+  background: rgba(255, 182, 193, 0.05);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 20, 147, 0.2);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-pink-md);
+}
+
+.card-pink-glass:hover {
+  background: rgba(255, 182, 193, 0.1);
+  border-color: rgba(255, 20, 147, 0.4);
+  box-shadow: var(--shadow-pink-glow);
+  transform: translateY(-4px);
+}
+
+/* Gradient Card */
+.card-pink-gradient {
+  background: var(--gradient-pink);
+  color: white;
+  border: none;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-pink-lg);
+}
+
+.card-pink-gradient:hover {
+  box-shadow: var(--shadow-pink-glow-strong);
+  transform: translateY(-4px) scale(1.02);
+}
+
+/* ============================================
+   INPUT STYLES
+   ============================================ */
+
+.input-pink {
+  background: var(--bg-primary);
+  border: 2px solid var(--pink-light);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  transition: var(--transition-default);
+  outline: none;
+  color: var(--text-primary);
+}
+
+.input-pink:focus {
+  border-color: var(--pink-primary);
+  box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.1);
+}
+
+.input-pink::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* ============================================
+   BADGE STYLES
+   ============================================ */
+
+.badge-pink {
+  background: var(--gradient-pink-sunset);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: inline-block;
+  box-shadow: var(--shadow-pink-sm);
+}
+
+.badge-pink-outline {
+  background: transparent;
+  color: var(--pink-primary);
+  border: 2px solid var(--pink-primary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+/* Glow Animation */
+@keyframes pink-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 20, 147, 0.3), 0 0 40px rgba(255, 20, 147, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 20, 147, 0.5), 0 0 60px rgba(255, 20, 147, 0.3);
+  }
+}
+
+.animate-pink-glow {
+  animation: pink-glow 2s ease-in-out infinite;
+}
+
+/* Pulse Animation */
+@keyframes pink-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+.animate-pink-pulse {
+  animation: pink-pulse 2s ease-in-out infinite;
+}
+
+/* Shimmer Animation */
+@keyframes pink-shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-pink-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--pink-light) 0%,
+    var(--pink-primary) 50%,
+    var(--pink-light) 100%
+  );
+  background-size: 1000px 100%;
+  animation: pink-shimmer 2s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient Animation */
+@keyframes pink-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-pink-gradient {
+  background: linear-gradient(135deg, #FFB6C1, #FF1493, #C71585, #9b59b6);
+  background-size: 300% 300%;
+  animation: pink-gradient-shift 5s ease infinite;
+}
+
+/* Float Animation */
+@keyframes pink-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-pink-float {
+  animation: pink-float 3s ease-in-out infinite;
+}
+
+/* Bounce Animation */
+@keyframes pink-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-10px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-pink-bounce {
+  animation: pink-bounce 1s ease-in-out infinite;
+}
+
+/* ============================================
+   DIVIDERS
+   ============================================ */
+
+.divider-pink {
+  height: 2px;
+  background: var(--gradient-pink);
+  border: none;
+  margin: 2rem 0;
+  border-radius: 9999px;
+}
+
+.divider-pink-gradient {
+  height: 2px;
+  background: var(--gradient-pink-purple);
+  border: none;
+  margin: 2rem 0;
+  border-radius: 9999px;
+  box-shadow: var(--shadow-pink-glow);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.text-pink {
+  color: var(--pink-primary);
+}
+
+.text-pink-light {
+  color: var(--pink-light);
+}
+
+.text-pink-dark {
+  color: var(--pink-dark);
+}
+
+.bg-pink {
+  background-color: var(--pink-primary);
+}
+
+.bg-pink-light {
+  background-color: var(--pink-light);
+}
+
+.bg-pink-gradient {
+  background: var(--gradient-pink);
+}
+
+.border-pink {
+  border-color: var(--pink-primary);
+}
+
+.shadow-pink {
+  box-shadow: var(--shadow-pink-md);
+}
+
+.shadow-pink-glow {
+  box-shadow: var(--shadow-pink-glow);
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
+.scrollbar-pink::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scrollbar-pink::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 5px;
+}
+
+.scrollbar-pink::-webkit-scrollbar-thumb {
+  background: var(--gradient-pink);
+  border-radius: 5px;
+  transition: var(--transition-default);
+}
+
+.scrollbar-pink::-webkit-scrollbar-thumb:hover {
+  background: var(--pink-primary);
+  box-shadow: var(--shadow-pink-glow);
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Focus Visible States */
+.btn-pink:focus-visible,
+.btn-pink-outline:focus-visible,
+.input-pink:focus-visible {
+  outline: 3px solid var(--pink-primary);
+  outline-offset: 2px;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .glass-pink,
+  .btn-pink,
+  .btn-pink-outline,
+  .btn-pink-ghost,
+  .card-pink,
+  .card-pink-glass,
+  .card-pink-gradient,
+  .input-pink,
+  .animate-pink-glow,
+  .animate-pink-pulse,
+  .animate-pink-shimmer,
+  .animate-pink-gradient,
+  .animate-pink-float,
+  .animate-pink-bounce {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .glass-pink {
+    background: var(--bg-primary);
+    border: 3px solid var(--pink-primary);
+  }
+  
+  .btn-pink-outline {
+    border-width: 3px;
+  }
+  
+  .card-pink {
+    border-width: 3px;
+  }
+}

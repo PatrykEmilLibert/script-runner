@@ -2,9 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Primary Pink Colors */
+  --pink-primary: #FF1493;
+  --pink-light: #FFB6C1;
+  --pink-lighter: #FFD1E3;
+  --pink-dark: #C71585;
+  --pink-darker: #990C46;
+  
+  /* Pink Accents */
+  --pink-accent-1: #FF9ACF;
+  --pink-accent-2: #DB7093;
+  --pink-accent-3: #E6127F;
+  
+  /* Gradients */
+  --gradient-pink: linear-gradient(135deg, #FF1493, #C71585, #9b59b6);
+  --gradient-pink-purple: linear-gradient(135deg, #FF1493 0%, #C71585 50%, #9b59b6 100%);
+  --gradient-pink-blue: linear-gradient(135deg, #FF1493 0%, #C71585 50%, #4A90E2 100%);
+  --gradient-pink-sunset: linear-gradient(135deg, #FFB6C1 0%, #FF1493 50%, #C71585 100%);
+  --gradient-glow-pink: radial-gradient(circle, rgba(255, 20, 147, 0.3) 0%, transparent 70%);
+  
+  /* Shadows with Pink Glow */
+  --shadow-pink-sm: 0 1px 3px rgba(255, 20, 147, 0.1), 0 4px 6px rgba(255, 20, 147, 0.1);
+  --shadow-pink-md: 0 4px 6px rgba(255, 20, 147, 0.07), 0 10px 15px rgba(255, 20, 147, 0.1);
+  --shadow-pink-lg: 0 10px 15px rgba(255, 20, 147, 0.1), 0 20px 25px rgba(255, 20, 147, 0.1);
+  --shadow-pink-glow: 0 0 20px rgba(255, 20, 147, 0.3), 0 0 40px rgba(255, 20, 147, 0.2);
+  --shadow-pink-glow-strong: 0 0 30px rgba(255, 20, 147, 0.5), 0 0 60px rgba(255, 20, 147, 0.3);
+  
+  /* Transitions */
+  --transition-default: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: all 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Light Mode Backgrounds */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8F9FA;
+  --bg-tertiary: #FFE4F1;
+  --text-primary: #212529;
+  --text-secondary: #495057;
+}
+
+/* Dark Mode Variables */
+[data-theme="dark"], .dark-mode, [data-mantine-color-scheme="dark"] {
+  /* Dark Mode Pink Colors */
+  --pink-primary: #DB7093;
+  --pink-light: #FFB3D4;
+  --pink-lighter: #FFC2DD;
+  --pink-dark: #C71585;
+  --pink-darker: #8B0F50;
+  
+  /* Dark Mode Gradients */
+  --gradient-pink: linear-gradient(135deg, #DB7093, #C71585, #8B0F50);
+  --gradient-pink-purple: linear-gradient(135deg, #DB7093 0%, #C71585 50%, #9b59b6 100%);
+  --gradient-dark-pink: linear-gradient(135deg, #C71585 0%, #990C46 100%);
+  
+  /* Dark Mode Backgrounds */
+  --bg-primary: #1A1B1E;
+  --bg-secondary: #25262B;
+  --bg-tertiary: #2C2E33;
+  --text-primary: #C1C2C5;
+  --text-secondary: #909296;
+  
+  /* Enhanced Glow for Dark Mode */
+  --shadow-pink-glow: 0 0 25px rgba(219, 112, 147, 0.4), 0 0 50px rgba(219, 112, 147, 0.25);
+  --shadow-pink-glow-strong: 0 0 35px rgba(219, 112, 147, 0.6), 0 0 70px rgba(219, 112, 147, 0.4);
+}
+
 html, body, #root {
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
+  transition: var(--transition-default);
+}
+
+/* Selection Style */
+::selection {
+  background-color: rgba(255, 20, 147, 0.3);
+  color: inherit;
+}
+
+::-moz-selection {
+  background-color: rgba(255, 20, 147, 0.3);
+  color: inherit;
 }

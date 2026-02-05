@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Modal, Button, TextInput, Textarea, Stack, Group, Alert, Badge, Text } from '@mantine/core';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Modal, Button, TextInput, Stack, Group, Alert, Badge, Text, Card } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { Upload, FileText } from 'lucide-react';
 
 interface AddScriptProps {
   onScriptAdded: () => void;
@@ -11,18 +13,18 @@ interface AddScriptProps {
 
 export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, scriptsDir }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; path: string } | null>(null);
   const [detectedDeps, setDetectedDeps] = useState<string[]>([]);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
 
   const form = useForm({
     initialValues: {
       scriptName: '',
       description: '',
       author: '',
-      scriptContent: '',
     },
     validate: {
       scriptName: (val) => (!val ? 'Script name is required' : null),
-      scriptContent: (val) => (!val ? 'Script content is required' : null),
     },
   });
 
@@ -33,7 +35,8 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
     const stdlibModules = new Set([
       'os', 'sys', 're', 'json', 'time', 'datetime', 'random', 'math',
       'collections', 'itertools', 'functools', 'pathlib', 'typing',
-      'logging', 'argparse', 'subprocess', 'threading', 'multiprocessing'
+      'logging', 'argparse', 'subprocess', 'threading', 'multiprocessing',
+      'urllib', 'requests', 'bs4', 'pandas', 'numpy', 'flask', 'django'
     ]);
     
     for (const line of lines) {
@@ -55,13 +58,48 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
     setDetectedDeps(Array.from(deps).sort());
   };
 
-  const handleCodeChange = (code: string) => {
-    form.setFieldValue('scriptContent', code);
-    analyzeCode(code);
+  const handleSelectFile = async () => {
+    try {
+      setIsLoadingFile(true);
+      const selected = await open({
+        filters: [
+          {
+            name: 'Python',
+            extensions: ['py'],
+          }
+        ],
+        multiple: false,
+        directory: false,
+      });
+
+      if (typeof selected === 'string' && selected) {
+        // Get file name from path
+        const fileName = selected.split(/[\\/]/).pop() || 'script';
+        const scriptNameWithoutExt = fileName.replace('.py', '').replace(/[^a-zA-Z0-9_]/g, '_');
+        
+        // Read file content via Tauri command
+        try {
+          const content: string = await invoke('read_file_content', { filePath: selected });
+          setSelectedFile({ name: fileName, path: selected });
+          form.setFieldValue('scriptName', scriptNameWithoutExt);
+          analyzeCode(content);
+          // Store content in window for submission
+          (window as any).__selectedFileContent = content;
+        } catch (readErr) {
+          console.error('Failed to read file:', readErr);
+          alert('Failed to read file content. Please try again.');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to select file:', err);
+    } finally {
+      setIsLoadingFile(false);
+    }
   };
 
   const handleSubmit = async (values: typeof form.values) => {
-    if (!values.scriptName || !values.scriptContent) {
+    const fileContent = (window as any).__selectedFileContent;
+    if (!values.scriptName || !fileContent) {
       return;
     }
     
@@ -70,13 +108,14 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
     try {
       const result = await invoke<string>('add_script', {
         scriptName: values.scriptName.trim(),
-        scriptContent: values.scriptContent,
+        scriptContent: fileContent,
         description: values.description || 'No description provided',
         author: values.author || 'Unknown',
         scriptsDir,
       });
       
       console.log(result);
+      (window as any).__selectedFileContent = null;
       onScriptAdded();
       onClose();
     } catch (err) {
@@ -91,59 +130,90 @@ export const AddScript: React.FC<AddScriptProps> = ({ onScriptAdded, onClose, sc
       opened={true}
       onClose={onClose}
       title="✨ Add New Script"
-      size="lg"
+      size="md"
       scrollAreaComponent={Stack}
     >
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <Stack gap="md">
-          {form.errors.scriptName && (
-            <Alert color="red" title="Error">
-              {form.errors.scriptName}
-            </Alert>
+          {/* File Selection */}
+          {!selectedFile ? (
+            <Card 
+              p="xl" 
+              radius="md" 
+              withBorder
+              style={{
+                border: '2px dashed #FF1493',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onClick={handleSelectFile}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255, 20, 147, 0.05)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'transparent';
+              }}
+            >
+              <Stack gap="sm" align="center">
+                <Upload size={32} color="#FF1493" />
+                <div>
+                  <Text fw={500}>{isLoadingFile ? 'Loading...' : 'Click to select Python file'}</Text>
+                  <Text size="sm" c="dimmed">.py files only</Text>
+                </div>
+              </Stack>
+            </Card>
+          ) : (
+            <Card p="md" radius="md" withBorder className="glass-pink">
+              <Group justify="space-between" mb="sm">
+                <Group gap="xs">
+                  <FileText size={20} color="#FF1493" />
+                  <div>
+                    <Text size="sm" fw={500}>{selectedFile.name}</Text>
+                  </div>
+                </Group>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="pink"
+                  onClick={handleSelectFile}
+                  loading={isLoadingFile}
+                >
+                  Change
+                </Button>
+              </Group>
+            </Card>
           )}
 
           <TextInput
             label="Script Name *"
             placeholder="my_awesome_script"
-            description="No spaces or special characters. Use underscores."
+            description="Auto-filled from filename. Adjust if needed."
             {...form.getInputProps('scriptName')}
             required
+            disabled={!selectedFile}
           />
 
           <TextInput
             label="Description"
             placeholder="What does this script do?"
             {...form.getInputProps('description')}
+            disabled={!selectedFile}
           />
 
           <TextInput
             label="Author"
             placeholder="Your name"
             {...form.getInputProps('author')}
-          />
-
-          <Textarea
-            label="Python Code *"
-            placeholder={`# Write your Python code here
-import requests
-
-def main():
-    print('Hello, World!')
-
-if __name__ == '__main__':
-    main()`}
-            minRows={15}
-            {...form.getInputProps('scriptContent')}
-            onChange={(e) => handleCodeChange(e.target.value)}
-            required
+            disabled={!selectedFile}
           />
 
           {detectedDeps.length > 0 && (
             <Stack gap="sm">
-              <Text fw={500}>🔍 Detected Dependencies</Text>
-              <Group>
+              <Text fw={500} size="sm">🔍 Detected Dependencies</Text>
+              <Group gap="xs" wrap="wrap">
                 {detectedDeps.map((dep) => (
-                  <Badge key={dep} color="blue">
+                  <Badge key={dep} color="pink" variant="light">
                     {dep}
                   </Badge>
                 ))}
@@ -161,14 +231,16 @@ if __name__ == '__main__':
             <Button
               type="submit"
               loading={isSubmitting}
-              color="blue"
+              disabled={!selectedFile}
+              variant="gradient"
+              gradient={{ from: "pink", to: "grape" }}
             >
-              ✨ Add Script & Push to GitHub
+              ✨ Add Script & Push
             </Button>
           </Group>
 
           <Text size="xs" c="dimmed" ta="center">
-            Script will be saved locally and automatically pushed to GitHub
+            Script will be saved locally and pushed to GitHub
           </Text>
         </Stack>
       </form>

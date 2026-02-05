@@ -24,6 +24,10 @@ dirs = "5"
 rand = "0.8"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 aes-gcm = "0.10"
+base64 = "0.21"
+whoami = "1.4"
+rusqlite = "0.30"
+machine-uid = "0.3"
 
 [[bin]]
 name = "script-runner"

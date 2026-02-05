@@ -9,9 +9,11 @@ use tauri::State;
 use serde_json;
 
 mod admin_key;
+mod analytics;
 mod dependency_manager;
 mod git_manager;
 mod kill_switch;
+mod kill_switch_manager;
 mod python_runner;
 mod script_manager;
 mod run_history;
@@ -22,6 +24,90 @@ mod script_encryption;
 pub struct AppState {
     scripts_dir: PathBuf,
     python_exec: PathBuf,
+}
+
+#[tauri::command]
+async fn read_file_content(file_path: String) -> Result<String, String> {
+    use std::fs;
+    fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file {}: {}", file_path, e))
+}
+
+#[tauri::command]
+async fn send_desktop_notification(
+    title: String,
+    body: String,
+    _notification_type: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        
+        // Use Windows Toast Notifications via PowerShell
+        let ps_script = format!(
+            r#"
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+
+            $template = @"
+            <toast>
+                <visual>
+                    <binding template="ToastGeneric">
+                        <text>{}</text>
+                        <text>{}</text>
+                    </binding>
+                </visual>
+            </toast>
+"@
+
+            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+            $xml.LoadXml($template)
+            $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\"ScriptRunner\").Show($toast)
+            \"#,
+            title.replace('"', "\\\""),
+            body.replace('"', "\\\"")
+        );
+
+        let output = Command::new("powershell")
+            .args(&["-NoProfile", "-Command", &ps_script])
+            .output()
+            .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
+
+        if !output.status.success() {
+            log::warn!("PowerShell notification failed, output: {:?}", output);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        let _ = Command::new("osascript")
+            .args(&[
+                "-e",
+                &format!(
+                    r#"display notification "{}" with title "{}""#,
+                    body.replace('"', r#"\""#),
+                    title.replace('"', r#"\""#)
+                ),
+            ])
+            .output()
+            .map_err(|e| format!("Failed to send macOS notification: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        
+        let _ = Command::new("notify-send")
+            .args(&[&title, &body])
+            .output()
+            .map_err(|e| format!("Failed to send Linux notification: {}", e))?;
+    }
+
+    Ok(())
 }
 
 fn resolve_scripts_dir() -> PathBuf {
@@ -83,7 +169,86 @@ fn resolve_python_exec() -> PathBuf {
 
 #[tauri::command]
 async fn check_kill_switch() -> Result<bool, String> {
+    // Check local override first
+    if let Some(allow) = kill_switch_manager::check_local_override() {
+        log::warn!("Kill switch local override active: allow={}", allow);
+        return Ok(!allow); // Invert because function returns "is_blocked"
+    }
+    
     kill_switch::check_remote_status().await
+}
+
+#[tauri::command]
+async fn check_kill_switch_status() -> Result<kill_switch::KillSwitchConfig, String> {
+    kill_switch::check_remote_status_advanced().await
+}
+
+#[tauri::command]
+async fn get_kill_switch_status() -> Result<kill_switch::KillSwitchConfig, String> {
+    // Alias for backward compatibility
+    check_kill_switch_status().await
+}
+
+#[tauri::command]
+async fn toggle_kill_switch_cmd(
+    blocked: bool,
+    reason: String,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::toggle_kill_switch(blocked, reason).await
+}
+
+#[tauri::command]
+async fn schedule_kill_switch(
+    until: String,
+    reason: String,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::schedule_block(until, reason).await
+}
+
+#[tauri::command]
+async fn add_machine_to_whitelist(
+    machine_id: String,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::add_to_whitelist(machine_id).await
+}
+
+#[tauri::command]
+async fn remove_machine_from_whitelist(
+    machine_id: String,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::remove_from_whitelist(machine_id).await
+}
+
+#[tauri::command]
+fn get_current_machine_id() -> Result<String, String> {
+    Ok(kill_switch::get_machine_id())
+}
+
+#[tauri::command]
+async fn set_kill_switch_message(
+    message: String,
+    redirect_url: Option<String>,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::set_custom_message(message, redirect_url).await
+}
+
+#[tauri::command]
+fn create_kill_switch_override(
+    allow: bool,
+    admin_key: String,
+) -> Result<String, String> {
+    admin_key::verify_admin_key(&admin_key)?;
+    kill_switch_manager::create_local_override(allow)
 }
 
 #[tauri::command]
@@ -103,14 +268,14 @@ async fn run_script(
     let start_time = chrono::Utc::now();
     // Prefer user script; fall back to official if user copy not found
     let user_dir = state.scripts_dir.join("scripts").join(&script_name);
-    let official_dir = state.scripts_dir.join("official").join(&script_name);
+    let official_dir_path = state.scripts_dir.join("official").join(&script_name);
 
     let script_dir = if user_dir.exists() {
         log::info!("Using user script: {:?}", user_dir);
         user_dir
-    } else if official_dir.exists() {
-        log::info!("Using official script: {:?}", official_dir);
-        official_dir
+    } else if official_dir_path.exists() {
+        log::info!("Using official script: {:?}", official_dir_path);
+        official_dir_path.clone()
     } else {
         let err = format!("Script not found: {}", script_name);
         log::error!("{}", err);
@@ -175,6 +340,22 @@ async fn run_script(
     };
 
     let _ = run_history::add_record(record);
+
+    // Track analytics
+    let is_official = official_dir_path.exists() && script_dir == official_dir_path;
+    let category = script_name
+        .split('_')
+        .next()
+        .unwrap_or("uncategorized")
+        .to_string();
+    
+    let _ = analytics::track_execution(
+        script_name.clone(),
+        duration.num_milliseconds() as u64,
+        result.is_ok(),
+        Some(category),
+        Some(is_official),
+    );
 
     result
 }
@@ -299,13 +480,6 @@ fn check_admin_key() -> Result<bool, String> {
 
     log::info!("Admin key check: {}", is_valid);
     Ok(is_valid)
-}
-
-#[tauri::command]
-fn generate_admin_key() -> Result<String, String> {
-    let path = admin_key::desktop_key_path();
-    let _payload = admin_key::write_key_file(&path)?;
-    Ok(format!("{}", path.to_string_lossy()))
 }
 
 #[tauri::command]
@@ -460,11 +634,37 @@ async fn get_download_url() -> Result<String, String> {
     }
 }
 
+// Analytics commands
+#[tauri::command]
+fn get_analytics_data(days: Option<u32>) -> Result<analytics::AnalyticsData, String> {
+    analytics::get_analytics_data(days)
+}
+
+#[tauri::command]
+fn export_analytics(format: String, days: Option<u32>) -> Result<String, String> {
+    analytics::export_analytics(format, days)
+}
+
+#[tauri::command]
+fn clear_analytics_data() -> Result<(), String> {
+    analytics::clear_analytics_data()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            send_desktop_notification,
             check_kill_switch,
+            check_kill_switch_status,
+            get_kill_switch_status,
+            toggle_kill_switch_cmd,
+            schedule_kill_switch,
+            add_machine_to_whitelist,
+            remove_machine_from_whitelist,
+            get_current_machine_id,
+            set_kill_switch_message,
+            create_kill_switch_override,
             sync_scripts,
             run_script,
             list_scripts,
@@ -477,7 +677,6 @@ fn main() {
             script_manager::get_local_scripts,
             update_all_dependencies,
             check_admin_key,
-            generate_admin_key,
             get_admin_key_info,
             get_run_history,
             export_history_as_csv,
@@ -486,7 +685,11 @@ fn main() {
             get_scripts_dir,
             encrypt_official_script,
             check_for_updates,
-            get_download_url
+            get_download_url,
+            get_analytics_data,
+            export_analytics,
+            clear_analytics_data,
+            read_file_content
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]

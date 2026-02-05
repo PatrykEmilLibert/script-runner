@@ -71,11 +71,13 @@ pub fn decrypt_script(enc_path: &Path) -> Result<String, String> {
 }
 
 /// Check if a script is encrypted
+#[allow(dead_code)]
 pub fn is_encrypted(script_dir: &Path) -> bool {
     script_dir.join("main.py.enc").exists()
 }
 
 /// Get the appropriate script path (encrypted or plain)
+#[allow(dead_code)]
 pub fn get_script_path(script_dir: &Path) -> Option<std::path::PathBuf> {
     let enc_path = script_dir.join("main.py.enc");
     let plain_path = script_dir.join("main.py");

@@ -1,6 +1,7 @@
-import { Card, Button, Group, SimpleGrid, Stack, Title, Text, Badge } from "@mantine/core";
-import { Play, Trash, Lock } from "lucide-react";
+import { Card, Button, Group, SimpleGrid, Stack, Title, Text, Badge, ActionIcon, ThemeIcon } from "@mantine/core";
+import { Play, Trash, Lock, Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { motion } from "framer-motion";
 
 interface ScriptListProps {
   title: string;
@@ -9,6 +10,8 @@ interface ScriptListProps {
   onSelect?: (script: string) => void;
   onDelete?: (script: string) => void;
   onEncrypt?: (script: string) => void;
+  onToggleFavorite?: (script: string, isFav: boolean) => void;
+  favorites?: string[];
   emptyText?: string;
 }
 
@@ -19,6 +22,8 @@ export default function ScriptList({
   onSelect,
   onDelete,
   onEncrypt,
+  onToggleFavorite,
+  favorites = [],
   emptyText = "Brak skryptów",
 }: ScriptListProps) {
   const { t } = useTranslation();
@@ -34,93 +39,117 @@ export default function ScriptList({
     );
   }
 
-  const ScriptCard = ({ script }: { script: string }) => (
-    <Card
-      key={script}
-      p="sm"
-      radius="md"
-      withBorder
-      shadow={selected === script ? "md" : "xs"}
-      style={{
-        cursor: onSelect ? "pointer" : "default",
-        border: selected === script ? "2px solid #4dabf7" : undefined,
-        transition: "all 0.2s ease",
-        minHeight: "80px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-      onClick={() => onSelect && onSelect(script)}
-      onMouseEnter={(e) => {
-        if (onSelect) {
-          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (onSelect && selected !== script) {
-          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-xs)";
-        }
-      }}
+  const isFavorite = (script: string) => favorites.includes(script);
+
+  const ScriptCard = ({ script, idx }: { script: string; idx: number }) => (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: idx * 0.05 }}
     >
-      <Stack gap="xs">
-        <Text fw={500} size="sm" lineClamp={2} style={{ wordBreak: "break-word" }}>
-          {script}
-        </Text>
-        <Group gap="xs" justify="center" wrap="wrap">
-          {onSelect && (
-            <Badge 
-              leftSection={<Play size={12} />} 
-              variant="light" 
-              color="blue"
-              size="xs"
-              style={{ cursor: "pointer" }}
-            >
-              {t("buttons.run", { defaultValue: "Uruchom" })}
-            </Badge>
-          )}
-          {onEncrypt && (
-            <Badge
+      <Card
+        key={script}
+        p="md"
+        radius="md"
+        withBorder
+        className="glass-pink"
+        style={{
+          cursor: "pointer",
+          background: isFavorite(script) ? "linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(219,112,147,0.1) 100%)" : undefined,
+          border: selected === script ? "2px solid #FF1493" : "1px solid rgba(255,20,147,0.2)",
+          transition: "all 0.3s ease",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          height: "100%",
+        }}
+        onClick={() => onSelect && onSelect(script)}
+        onMouseEnter={(e) => {
+          if (onSelect) {
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px rgba(255,20,147,0.2)";
+            (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.boxShadow = "none";
+          (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+        }}
+      >
+        <Group justify="space-between" mb="sm" align="flex-start">
+          <Text fw={500} size="sm" lineClamp={2} style={{ flex: 1, wordBreak: "break-word" }}>
+            {script}
+          </Text>
+          {onToggleFavorite && (
+            <ActionIcon
+              size="lg"
               variant="light"
-              color="yellow"
-              size="xs"
-              style={{ cursor: "pointer" }}
+              color={isFavorite(script) ? "pink" : "gray"}
               onClick={(e) => {
                 e.stopPropagation();
-                onEncrypt(script);
+                onToggleFavorite(script, !isFavorite(script));
               }}
-              leftSection={<Lock size={12} />}
             >
-              Encrypt
-            </Badge>
-          )}
-          {onDelete && (
-            <Badge
-              variant="light"
-              color="red"
-              size="xs"
-              style={{ cursor: "pointer" }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(script);
-              }}
-              leftSection={<Trash size={12} />}
-            >
-              {t("buttons.delete", { defaultValue: "Usuń" })}
-            </Badge>
+              <Star size={16} fill={isFavorite(script) ? "#FF1493" : "none"} color="#FF1493" />
+            </ActionIcon>
           )}
         </Group>
-      </Stack>
-    </Card>
+
+        <Stack gap="xs">
+          {onSelect && (
+            <Button
+              leftSection={<Play size={14} />}
+              variant="gradient"
+              gradient={{ from: "pink", to: "grape", deg: 135 }}
+              size="sm"
+              fullWidth
+              className="pink-glow"
+            >
+              Run
+            </Button>
+          )}
+          <Group gap="xs" justify="center" wrap="wrap">
+            {onEncrypt && (
+              <Button
+                leftSection={<Lock size={12} />}
+                variant="light"
+                color="yellow"
+                size="xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEncrypt(script);
+                }}
+              >
+                Encrypt
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                leftSection={<Trash size={12} />}
+                variant="light"
+                color="red"
+                size="xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(script);
+                }}
+              >
+                Delete
+              </Button>
+            )}
+          </Group>
+        </Stack>
+      </Card>
+    </motion.div>
   );
 
   return (
     <Stack gap="md">
       <Title order={2}>{title}</Title>
       <SimpleGrid 
-        cols={{ base: 2, xs: 3, sm: 4, md: 5, lg: 6, xl: 7 }} 
+        cols={{ base: 1, xs: 2, sm: 3, md: 4, lg: 5 }} 
         spacing="md"
       >
-        {scripts.map((script) => <ScriptCard key={script} script={script} />)}
+        {scripts.map((script, idx) => <ScriptCard key={script} script={script} idx={idx} />)}
       </SimpleGrid>
     </Stack>
   );
