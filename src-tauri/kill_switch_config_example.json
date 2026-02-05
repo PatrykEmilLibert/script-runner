@@ -1,0 +1,11 @@
+{
+  "blocked": false,
+  "reason": "Maintenance in progress",
+  "blocked_until": "2026-02-10T18:00:00Z",
+  "whitelist": [
+    "DESKTOP-ABC123-john-a1b2c3d4",
+    "MacBook-XYZ-admin-e5f6g7h8"
+  ],
+  "message": "The application is temporarily unavailable due to scheduled maintenance. Please try again after 6 PM UTC.",
+  "redirect_url": "https://scriptrunner.example.com/status"
+}

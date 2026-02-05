@@ -68,6 +68,7 @@ pub fn desktop_key_path() -> PathBuf {
     }
 }
 
+#[allow(dead_code)]
 pub fn generate_hex_key_256() -> String {
     // 128 random bytes -> 256 hex characters
     let mut bytes = [0u8; 128];
@@ -75,6 +76,7 @@ pub fn generate_hex_key_256() -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+#[allow(dead_code)]
 pub fn write_key_file(path: &Path) -> Result<AdminKeyFile, String> {
     let key_hex = generate_hex_key_256();
     let payload = AdminKeyFile {
@@ -103,4 +105,20 @@ pub fn validate_key_file(path: &Path) -> bool {
         },
         Err(_) => false,
     }
+}
+
+pub fn verify_admin_key(provided_key: &str) -> Result<bool, String> {
+    let key_path = desktop_key_path();
+    
+    if !key_path.exists() {
+        return Err("Admin key file not found. Generate a key first.".to_string());
+    }
+    
+    let content = fs::read_to_string(&key_path)
+        .map_err(|e| format!("Failed to read key file: {}", e))?;
+    
+    let parsed: AdminKeyFile = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse key file: {}", e))?;
+    
+    Ok(provided_key == parsed.key)
 }

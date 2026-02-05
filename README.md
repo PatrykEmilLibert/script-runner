@@ -1,13 +1,44 @@
 # ScriptRunner - Python Script Executor
 
 A modern desktop application built with **Tauri + React** for executing Python scripts with:
-- ✨ **Elegant dark-mode UI** inspired by modern developer tools
+- 🌸 **Elegant Pink Theme** with dark/light mode support
 - 🔄 **Auto-update** from GitHub (both app & scripts)
 - 📦 **Automatic dependency detection** using AST parsing
 - 🛡️ **Remote kill switch** for security
+- 📊 **Analytics Dashboard** with usage statistics
+- 🔔 **Smart Notifications** system
+- 🎛️ **Admin Panel** for advanced management
 - 🚀 **Standalone executables** for Windows & Mac (no dependencies required)
 
 ## Features
+
+### 🌸 Pink Theme
+- Modern pink color palette (#EC4899 primary)
+- Smooth dark/light mode transitions
+- Glassmorphism effects
+- Responsive design with Tailwind CSS
+- Framer Motion animations
+
+### 📊 Analytics Dashboard
+- Real-time execution statistics
+- Script usage charts (Recharts)
+- Success/failure rate tracking
+- Performance metrics
+- Visual data representation
+
+### 🛡️ Admin Panel
+- Secure admin key authentication
+- Kill Switch management
+- Script upload/management via drag & drop
+- System diagnostics
+- Configuration override
+
+### 🔔 Notification System
+- Success/Error/Warning/Info notifications
+- Auto-dismiss with configurable timing
+- Position control (top-right by default)
+- Mantine Notifications integration
+- Custom styling per notification type
 
 ### 1. **Automatic Dependency Resolution**
 - Scans Python imports using AST parsing
@@ -221,10 +252,60 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 ## Tech Stack
 
 - **Frontend**: React 18 + TypeScript + TailwindCSS + Framer Motion
-- **Desktop**: Tauri 1.x (lightweight Electron alternative)
-- **Backend**: Rust + reqwest + git2
+- **UI Components**: Mantine UI + Lucide Icons
+- **Charts**: Recharts (responsive, interactive)
+- **Desktop**: Tauri 2.x (lightweight Electron alternative)
+- **Backend**: Rust + reqwest + git2 + rusqlite
 - **Python Execution**: Subprocess + AST parsing for dependencies
-- **Styling**: Custom dark theme with glassmorphism
+- **Database**: SQLite (analytics storage)
+- **Styling**: Custom pink theme with glassmorphism
+
+## Screenshots
+
+### 🌸 Pink Theme (Dark Mode)
+```
+[Placeholder: Screenshot showing dark mode interface]
+- Charcoal background with pink accents
+- Smooth transitions and gradients
+- Modern, professional design
+```
+
+### 📊 Analytics Dashboard
+```
+[Placeholder: Analytics tab with charts]
+- Execution timeline (bar chart)
+- Success rate pie chart
+- Top scripts ranking
+- Performance metrics
+```
+
+### 🛡️ Admin Panel
+```
+[Placeholder: Admin panel interface]
+- Admin key authentication
+- Kill Switch status indicator
+- Drag & drop script upload
+- System diagnostics panel
+```
+
+### 🔔 Notification System
+```
+[Placeholder: Notification examples]
+- Success (green with checkmark)
+- Error (red with X)
+- Warning (yellow with exclamation)
+- Info (blue with info icon)
+```
+
+## Documentation
+
+- 📖 **[README.md](README.md)** - This file (overview & quick start)
+- 🔄 **[UPGRADE_GUIDE.md](UPGRADE_GUIDE.md)** - What's new & migration steps
+- 🛡️ **[ADMIN_GUIDE.md](ADMIN_GUIDE.md)** - Admin panel & kill switch management
+- ✅ **[TESTING.md](TESTING.md)** - Complete testing checklist
+- 🚀 **[QUICK_START.md](QUICK_START.md)** - Getting started quickly
+- 📋 **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Technical overview
+- 📦 **[DEPLOYMENT.md](DEPLOYMENT.md)** - Build & release process
 
 ## License
 
