@@ -56,25 +56,19 @@ New tab: **Admin** (🔧 icon)
 - Stored in system config
 
 **Features:**
-1. **Kill Switch Management**
-   - View current status (Blocked/Active)
-   - Last check timestamp
-   - Manual refresh button
-   - Visual status indicators
-
-2. **Script Upload (Drag & Drop)**
+1. **Script Upload (Drag & Drop)**
    - Drag `.py` files directly to the panel
    - Automatic validation
    - Upload to configured repository
    - Success/error notifications
 
-3. **Admin Key Diagnostics**
+2. **Admin Key Diagnostics**
    - View stored admin key
    - Regenerate if lost
    - Copy to clipboard
    - Security warnings
 
-4. **System Information**
+3. **System Information**
    - App version
    - Python version
    - Platform info
@@ -127,7 +121,6 @@ This update is **100% backward compatible**. Your existing:
 - Scripts continue to work
 - Logs are preserved
 - Configuration stays the same
-- Kill switch configuration unchanged
 
 ### ⚡ What Changed Internally:
 1. **Theme System**: New Zustand store for theme state
@@ -196,9 +189,8 @@ On first launch:
 
 ### Admin Panel
 ```
-[Placeholder: Admin panel with kill switch]
+[Placeholder: Admin panel interface]
 - Admin key input
-- Kill switch status card
 - Drag & drop upload zone
 ```
 
@@ -226,7 +218,7 @@ On first launch:
 2. Click "Generate Admin Key" (first time only)
 3. **Save the key securely!**
 4. Enter key to unlock panel
-5. Manage kill switch, upload scripts, view diagnostics
+5. Upload scripts, view diagnostics
 
 ### Customizing Theme
 1. Click sun/moon icon (top-right)

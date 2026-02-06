@@ -10,6 +10,8 @@ import {
   Group, 
   ActionIcon, 
   Indicator,
+  Stack,
+  Title,
   Text,
   Box,
   Tooltip,
@@ -40,6 +42,7 @@ import { AdminDropzone } from "./components/AdminDropzone";
 import AdminPanel from "./components/AdminPanel";
 import Analytics from "./components/Analytics";
 import DarkModeToggle from "./components/DarkModeToggle";
+import GitHubLogin from "./components/GitHubLogin";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { ToastContainer } from "./components/Toast";
@@ -65,6 +68,7 @@ export default function App() {
   const [scripts, setScripts] = useState<string[]>([]);
   const [selectedScript, setSelectedScript] = useState<string | null>(null);
   const [output, setOutput] = useState("");
+  const [runningScripts, setRunningScripts] = useState<Record<string, { output: string; isRunning: boolean }>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dashboard" | "scripts" | "analytics" | "admin" | "history" | "logs" | "output">("dashboard");
   const [showAddScript, setShowAddScript] = useState(false);
@@ -116,7 +120,7 @@ export default function App() {
         const newMode = !darkMode;
         setDarkMode(newMode);
         localStorage.setItem('sr-theme', newMode ? 'dark' : 'light');
-        window.location.reload(); // Reload to apply theme
+        // Removed automatic reload - theme will apply on next app restart
       }
     };
 
@@ -159,6 +163,55 @@ export default function App() {
     });
   };
 
+  const handleAuthChange = async (isAdminStatus: boolean) => {
+    setIsAdmin(isAdminStatus);
+    console.log("Admin status updated:", isAdminStatus);
+  };
+
+  const runScriptDirectly = async (scriptName: string) => {
+    // Initialize running state
+    setRunningScripts(prev => ({
+      ...prev,
+      [scriptName]: { output: "Starting script...\n", isRunning: true }
+    }));
+    setActiveTab("output");
+    setSelectedScript(scriptName);
+
+    try {
+      // Check compatibility
+      try {
+        const issues: string[] = await invoke("check_script_compatibility", { scriptName });
+        if (issues.length > 0 && !window.confirm(
+          `⚠️ This script contains Windows-specific libraries:\n\n${issues.join("\n")}\n\nContinue anyway?`
+        )) {
+          setRunningScripts(prev => ({
+            ...prev,
+            [scriptName]: { output: "Script execution cancelled by user.\n", isRunning: false }
+          }));
+          return;
+        }
+      } catch (err) {
+        // Proceed if check fails
+      }
+
+      const result: string = await invoke("run_script", { scriptName, args: null });
+      setRunningScripts(prev => ({
+        ...prev,
+        [scriptName]: { output: result, isRunning: false }
+      }));
+      setOutput(result);
+      await sendNotification("Script Completed", `${scriptName} finished successfully`, 'success', { sound: false });
+    } catch (error) {
+      const errorMsg = `Error: ${error}`;
+      setRunningScripts(prev => ({
+        ...prev,
+        [scriptName]: { output: errorMsg, isRunning: false }
+      }));
+      setOutput(errorMsg);
+      await sendNotification("Script Failed", `${scriptName} encountered an error`, 'error', { sound: false });
+    }
+  };
+
   useEffect(() => {
     const initApp = async () => {
       try {
@@ -169,13 +222,13 @@ export default function App() {
           return;
         }
 
-        // Check admin key
+        // Check admin status (GitHub auth or legacy admin key)
         try {
-          const admin: boolean = await invoke("check_admin_key");
+          const admin: boolean = await invoke("check_admin_status");
           setIsAdmin(admin);
           console.log("Admin check result:", admin);
         } catch (adminError) {
-          console.error("Admin key check error:", adminError);
+          console.error("Admin status check error:", adminError);
           setIsAdmin(false);
         }
 
@@ -251,6 +304,22 @@ export default function App() {
       const items: any[] = await invoke("get_local_scripts", { scriptsDir: dir, subdir: "official" });
       const names = items.map((s: any) => s.name ?? "");
       setOfficialScripts(names);
+      
+      // Auto-encrypt official scripts if admin
+      if (isAdmin) {
+        for (const scriptName of names) {
+          try {
+            // Try to encrypt - backend will handle if already encrypted
+            await invoke("encrypt_official_script", { scriptName });
+            console.log(`Encrypted: ${scriptName}`);
+          } catch (err) {
+            // Ignore errors for already encrypted scripts
+            if (!String(err).includes("Script not found")) {
+              console.log(`Encryption check for ${scriptName}:`, err);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Failed to load official scripts:", error);
     }
@@ -350,7 +419,7 @@ export default function App() {
         className="pink-theme-app"
       >
         <AppShell.Header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <Container size="xl" className="h-full">
+          <Container fluid className="h-full px-6">
             <Flex justify="space-between" align="center" className="h-full">
               <Group gap="md">
                 <IconSparkles size={28} className="text-pink-500 animate-pulse" />
@@ -379,18 +448,7 @@ export default function App() {
         </AppShell.Header>
 
         <AppShell.Main className="bg-gray-50 dark:bg-gray-900">
-          <Container size="xl">
-            {selectedScript && (
-              <Box mb="md" className="pink-glow">
-                <ScriptExecutor 
-                  script={selectedScript} 
-                  onOutput={setOutput}
-                  onFavoriteToggle={toggleFavorite}
-                  isFavorite={favorites.includes(selectedScript)}
-                />
-              </Box>
-            )}
-
+          <Container fluid className="px-6">
             <Tabs 
               value={activeTab} 
               onChange={(value) => setActiveTab(value as any)} 
@@ -408,6 +466,19 @@ export default function App() {
                 <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
                   {t('nav.history')}
                 </Tabs.Tab>
+                <Tabs.Tab 
+                  value="output" 
+                  leftSection={<IconFileText size={16} />}
+                  rightSection={
+                    Object.keys(runningScripts).length > 0 && (
+                      <Badge size="xs" color="pink" variant="filled">
+                        {Object.keys(runningScripts).length}
+                      </Badge>
+                    )
+                  }
+                >
+                  Script Output
+                </Tabs.Tab>
               </Tabs.List>
 
               <Tabs.Panel value="dashboard">
@@ -416,6 +487,8 @@ export default function App() {
                   officialScripts={officialScripts}
                   onAddScript={() => setShowAddScript(true)}
                   isAdmin={false}
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
                 />
               </Tabs.Panel>
 
@@ -439,7 +512,7 @@ export default function App() {
                     scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
                     emptyText={t('scripts.noScripts')}
                     selected={selectedScript}
-                    onSelect={setSelectedScript}
+                    onSelect={runScriptDirectly}
                     onToggleFavorite={toggleFavorite}
                     favorites={favorites}
                   />
@@ -448,7 +521,7 @@ export default function App() {
                     title={t('scripts.userScripts')}
                     scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
                     selected={selectedScript}
-                    onSelect={setSelectedScript}
+                    onSelect={runScriptDirectly}
                     emptyText={t('scripts.noScripts')}
                     onDelete={(s) => deleteScript(s, "scripts")}
                     onToggleFavorite={toggleFavorite}
@@ -460,6 +533,79 @@ export default function App() {
               <Tabs.Panel value="history">
                 <History />
               </Tabs.Panel>
+
+              {Object.keys(runningScripts).length > 0 ? (
+                <Tabs.Panel value="output">
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <Title order={3}>Script Outputs</Title>
+                      <Badge color="pink" variant="light">
+                        {Object.keys(runningScripts).length} script{Object.keys(runningScripts).length > 1 ? 's' : ''}
+                      </Badge>
+                    </Group>
+                    
+                    <Tabs defaultValue={selectedScript || Object.keys(runningScripts)[0]} color="pink" variant="pills">
+                      <Tabs.List>
+                        {Object.keys(runningScripts).map((scriptName) => (
+                          <Tabs.Tab 
+                            key={scriptName} 
+                            value={scriptName}
+                            rightSection={
+                              runningScripts[scriptName].isRunning && (
+                                <div className="animate-spin rounded-full h-3 w-3 border-2 border-pink-200 border-t-pink-500"></div>
+                              )
+                            }
+                          >
+                            {scriptName}
+                          </Tabs.Tab>
+                        ))}
+                      </Tabs.List>
+
+                      {Object.entries(runningScripts).map(([scriptName, data]) => (
+                        <Tabs.Panel key={scriptName} value={scriptName} pt="md">
+                          <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-pink-200 dark:border-pink-900 pink-glow">
+                            <div className="p-4 border-b border-pink-100 dark:border-gray-700">
+                              <Group justify="space-between">
+                                <div>
+                                  <Text fw={700} className="text-pink-600">
+                                    {scriptName}
+                                  </Text>
+                                  <Text size="sm" c="dimmed">
+                                    {data.isRunning ? "Running..." : "Completed"}
+                                  </Text>
+                                </div>
+                                <Button
+                                  size="xs"
+                                  variant="light"
+                                  color="pink"
+                                  onClick={() => {
+                                    setRunningScripts(prev => {
+                                      const updated = { ...prev };
+                                      delete updated[scriptName];
+                                      return updated;
+                                    });
+                                  }}
+                                >
+                                  Clear
+                                </Button>
+                              </Group>
+                            </div>
+                            <pre className="p-4 overflow-auto max-h-96 text-sm font-mono bg-gray-50 dark:bg-gray-900 white-space-pre-wrap break-words">
+                              {data.output}
+                            </pre>
+                          </div>
+                        </Tabs.Panel>
+                      ))}
+                    </Tabs>
+                  </Stack>
+                </Tabs.Panel>
+              ) : (
+                <Tabs.Panel value="output">
+                  <Alert color="pink" variant="light">
+                    <Text size="sm">No scripts have been run yet. Click a script to execute it and see the output here.</Text>
+                  </Alert>
+                </Tabs.Panel>
+              )}
             </Tabs>
 
             {showAddScript && (
@@ -495,7 +641,7 @@ export default function App() {
       className="pink-theme-app"
     >
       <AppShell.Header className="border-b border-pink-100 dark:border-gray-700 bg-white dark:bg-gray-800 pink-header-glow">
-        <Container size="xl" className="h-full">
+        <Container fluid className="h-full px-6">
           <Flex justify="space-between" align="center" className="h-full">
             <Group gap="md">
               <IconSparkles size={28} className="text-pink-500 animate-pulse" />
@@ -543,7 +689,7 @@ export default function App() {
       </AppShell.Header>
 
       <AppShell.Main className="bg-gradient-to-br from-gray-50 to-pink-50/30 dark:from-gray-900 dark:to-gray-950">
-        <Container size="xl">
+        <Container fluid className="px-6">
           {errorMessage && (
             <Alert 
               title="Error" 
@@ -557,18 +703,7 @@ export default function App() {
             </Alert>
           )}
 
-          {selectedScript && (
-            <Box mb="md" className="pink-glow-strong">
-              <ScriptExecutor 
-                script={selectedScript} 
-                onOutput={setOutput}
-                onFavoriteToggle={toggleFavorite}
-                isFavorite={favorites.includes(selectedScript)}
-              />
-            </Box>
-          )}
-
-          <Tabs 
+          <Tabs
             value={activeTab} 
             onChange={(value) => setActiveTab(value as any)} 
             className="pink-tabs"
@@ -630,15 +765,20 @@ export default function App() {
                 {t('logs.title')}
               </Tabs.Tab>
 
-              {output && (
-                <Tabs.Tab 
-                  value="output" 
-                  leftSection={<IconFileText size={16} />}
-                  className="pink-tab-item"
-                >
-                  Output 📊
-                </Tabs.Tab>
-              )}
+              <Tabs.Tab 
+                value="output" 
+                leftSection={<IconFileText size={16} />}
+                className="pink-tab-item"
+                rightSection={
+                  Object.keys(runningScripts).length > 0 && (
+                    <Badge size="xs" color="pink" variant="filled">
+                      {Object.keys(runningScripts).length}
+                    </Badge>
+                  )
+                }
+              >
+                Script Output
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="dashboard">
@@ -647,6 +787,9 @@ export default function App() {
                 officialScripts={officialScripts}
                 onAddScript={() => isAdmin && setShowAddScript(true)}
                 isAdmin={isAdmin}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                onAuthChange={handleAuthChange}
               />
             </Tabs.Panel>
 
@@ -677,7 +820,7 @@ export default function App() {
                   scripts={officialScripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
                   emptyText={t('scripts.noScripts')}
                   selected={selectedScript}
-                  onSelect={setSelectedScript}
+                  onSelect={runScriptDirectly}
                   onDelete={isAdmin ? (s) => deleteScript(s, "official") : undefined}
                   onEncrypt={isAdmin ? encryptScript : undefined}
                   onToggleFavorite={toggleFavorite}
@@ -688,7 +831,7 @@ export default function App() {
                   title={t('scripts.userScripts')}
                   scripts={scripts.filter(s => s.toLowerCase().includes(scriptSearch.toLowerCase()))}
                   selected={selectedScript}
-                  onSelect={setSelectedScript}
+                  onSelect={runScriptDirectly}
                   onDelete={isAdmin ? (s) => deleteScript(s, "scripts") : undefined}
                   emptyText={t('scripts.noScripts')}
                   onToggleFavorite={toggleFavorite}
@@ -727,19 +870,76 @@ export default function App() {
               )}
             </Tabs.Panel>
 
-            {output && (
+            {Object.keys(runningScripts).length > 0 ? (
               <Tabs.Panel value="output">
-                <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-pink-200 dark:border-pink-900 pink-glow">
-                  <div className="p-4 border-b border-pink-100 dark:border-gray-700">
-                    <Text fw={700} className="text-pink-600">
-                      Script Output
-                    </Text>
-                    <Text size="sm" c="dimmed">From: {selectedScript}</Text>
-                  </div>
-                  <pre className="p-4 overflow-auto max-h-96 text-sm font-mono bg-gray-50 dark:bg-gray-900 white-space-pre-wrap break-words">
-                    {output}
-                  </pre>
-                </div>
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Title order={3}>Script Outputs</Title>
+                    <Badge color="pink" variant="light">
+                      {Object.keys(runningScripts).length} script{Object.keys(runningScripts).length > 1 ? 's' : ''}
+                    </Badge>
+                  </Group>
+                  
+                  <Tabs defaultValue={selectedScript || Object.keys(runningScripts)[0]} color="pink" variant="pills">
+                    <Tabs.List>
+                      {Object.keys(runningScripts).map((scriptName) => (
+                        <Tabs.Tab 
+                          key={scriptName} 
+                          value={scriptName}
+                          rightSection={
+                            runningScripts[scriptName].isRunning && (
+                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-pink-200 border-t-pink-500"></div>
+                            )
+                          }
+                        >
+                          {scriptName}
+                        </Tabs.Tab>
+                      ))}
+                    </Tabs.List>
+
+                    {Object.entries(runningScripts).map(([scriptName, data]) => (
+                      <Tabs.Panel key={scriptName} value={scriptName} pt="md">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-pink-200 dark:border-pink-900 pink-glow">
+                          <div className="p-4 border-b border-pink-100 dark:border-gray-700">
+                            <Group justify="space-between">
+                              <div>
+                                <Text fw={700} className="text-pink-600">
+                                  {scriptName}
+                                </Text>
+                                <Text size="sm" c="dimmed">
+                                  {data.isRunning ? "Running..." : "Completed"}
+                                </Text>
+                              </div>
+                              <Button
+                                size="xs"
+                                variant="light"
+                                color="pink"
+                                onClick={() => {
+                                  setRunningScripts(prev => {
+                                    const updated = { ...prev };
+                                    delete updated[scriptName];
+                                    return updated;
+                                  });
+                                }}
+                              >
+                                Clear
+                              </Button>
+                            </Group>
+                          </div>
+                          <pre className="p-4 overflow-auto max-h-96 text-sm font-mono bg-gray-50 dark:bg-gray-900 white-space-pre-wrap break-words">
+                            {data.output}
+                          </pre>
+                        </div>
+                      </Tabs.Panel>
+                    ))}
+                  </Tabs>
+                </Stack>
+              </Tabs.Panel>
+            ) : (
+              <Tabs.Panel value="output">
+                <Alert color="pink" variant="light">
+                  <Text size="sm">No scripts have been run yet. Click a script to execute it and see the output here.</Text>
+                </Alert>
               </Tabs.Panel>
             )}
           </Tabs>

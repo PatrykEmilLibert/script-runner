@@ -106,30 +106,6 @@ ScriptRunner automatically:
 
 No need for `requirements.txt` - but you can add one if you want specific versions.
 
-## 🔒 Kill Switch (Admin)
-
-**To block app for all users:**
-
-1. Create GitHub repo: `script-runner-config`
-2. Add `kill_switch.json`:
-
-```json
-{
-  "blocked": true,
-  "reason": "Emergency maintenance"
-}
-```
-
-3. Push to GitHub
-4. All apps block within seconds!
-
-**To unblock:**
-```json
-{
-  "blocked": false
-}
-```
-
 ## 🐛 Troubleshooting
 
 ### Scripts not showing?

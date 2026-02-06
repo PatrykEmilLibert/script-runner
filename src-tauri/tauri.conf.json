@@ -33,6 +33,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": []
+    "resources": [],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "both",
+        "languages": ["English", "Polish"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

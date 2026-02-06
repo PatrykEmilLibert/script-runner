@@ -8,12 +8,16 @@ import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
 import AdminKeyDiagnostics from "./AdminKeyDiagnostics";
+import GitHubLogin from "./GitHubLogin";
 
 interface DashboardProps {
   scripts: string[];
   onAddScript: () => void;
   isAdmin: boolean;
   officialScripts: string[];
+  favorites?: string[];
+  onToggleFavorite?: (script: string, isFav: boolean) => void;
+  onAuthChange?: (isAdmin: boolean) => void;
 }
 
 interface Stats {
@@ -29,17 +33,13 @@ interface RecentRun {
   duration: number;
 }
 
-export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts }: DashboardProps) {
+export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts, favorites = [], onToggleFavorite, onAuthChange }: DashboardProps) {
   const [stats, setStats] = useState<Stats>({
     totalScripts: scripts.length + officialScripts.length,
     lastSync: Date.now(),
     appStatus: "Healthy",
   });
   const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    const saved = localStorage.getItem("favScripts");
-    return saved ? JSON.parse(saved) : [];
-  });
   const [loading, setLoading] = useState(true);
   const [syncCountdown, setSyncCountdown] = useState(0);
 
@@ -85,30 +85,20 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
     return () => clearInterval(syncInterval);
   }, [loadDashboardData]);
 
-  // Countdown timer for next sync (non-blocking)
-  useEffect(() => {
-    if (syncCountdown <= 0) return;
-    
-    const timer = setTimeout(() => {
-      setSyncCountdown(syncCountdown - 1);
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, [syncCountdown]);
+  // Countdown timer for next sync (non-blocking) - DISABLED to prevent jumping
+  // useEffect(() => {
+  //   if (syncCountdown <= 0) return;
+  //   
+  //   const timer = setTimeout(() => {
+  //     setSyncCountdown(syncCountdown - 1);
+  //   }, 1000);
+  //   
+  //   return () => clearTimeout(timer);
+  // }, [syncCountdown]);
 
   const handleManualSync = async () => {
     await loadDashboardData();
     setSyncCountdown(1800);
-  };
-
-  const toggleFavorite = (scriptName: string) => {
-    setFavorites((prev) => {
-      const updated = prev.includes(scriptName)
-        ? prev.filter((s) => s !== scriptName)
-        : [...prev, scriptName];
-      localStorage.setItem("favScripts", JSON.stringify(updated));
-      return updated;
-    });
   };
 
   const favoriteScripts = scripts.filter((s) => favorites.includes(s));
@@ -122,10 +112,9 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
   };
 
   const formatSyncCountdown = (seconds: number) => {
-    if (seconds <= 0) return "synced";
+    if (seconds <= 0) return "Auto-sync enabled";
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}m ${secs}s`;
+    return `Next sync in ~${mins} minutes`;
   };
 
   // Stat Card component
@@ -201,6 +190,9 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
 
   return (
     <Stack gap="xl">
+      {/* GitHub Login - Always visible */}
+      <GitHubLogin onAuthChange={onAuthChange} />
+      
       {isAdmin && <AdminKeyDiagnostics />}
 
       {/* Quick Stats - Only 2 cards */}
@@ -215,7 +207,20 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
           icon={Clock} 
           title="Last Sync" 
           value={formatTime(Math.floor((Date.now() - stats.lastSync) / 1000))}
-          subtitle={`Next sync in: ${formatSyncCountdown(syncCountdown)}`}
+          subtitle={
+            <Group gap="xs" mt="xs">
+              <Text size="sm" c="dimmed">{formatSyncCountdown(syncCountdown)}</Text>
+              <Button
+                leftSection={<RefreshCw size={14} />}
+                size="xs"
+                variant="light"
+                color="pink"
+                onClick={handleManualSync}
+              >
+                Sync Now
+              </Button>
+            </Group>
+          }
         />
       </SimpleGrid>
 
@@ -227,15 +232,6 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
             <Title order={3}>⭐ Favorite Scripts</Title>
             <Badge variant="light" color="pink">{allFavorites.length} favorites</Badge>
           </Group>
-          <Button
-            leftSection={<RefreshCw size={16} />}
-            size="xs"
-            variant="light"
-            color="pink"
-            onClick={handleManualSync}
-          >
-            Sync Now
-          </Button>
         </Group>
 
         {allFavorites.length === 0 ? (
@@ -278,7 +274,7 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
                     color="pink"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleFavorite(script);
+                      onToggleFavorite?.(script, false);
                     }}
                   >
                     <Star size={14} fill="#FF1493" color="#FF1493" />

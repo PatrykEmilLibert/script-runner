@@ -4,8 +4,7 @@ A modern desktop application built with **Tauri + React** for executing Python s
 - 🌸 **Elegant Pink Theme** with dark/light mode support
 - 🔄 **Auto-update** from GitHub (both app & scripts)
 - 📦 **Automatic dependency detection** using AST parsing
-- 🛡️ **Remote kill switch** for security
-- 📊 **Analytics Dashboard** with usage statistics
+-  **Analytics Dashboard** with usage statistics
 - 🔔 **Smart Notifications** system
 - 🎛️ **Admin Panel** for advanced management
 - 🚀 **Standalone executables** for Windows & Mac (no dependencies required)
@@ -28,7 +27,6 @@ A modern desktop application built with **Tauri + React** for executing Python s
 
 ### 🛡️ Admin Panel
 - Secure admin key authentication
-- Kill Switch management
 - Script upload/management via drag & drop
 - System diagnostics
 - Configuration override
@@ -52,13 +50,7 @@ A modern desktop application built with **Tauri + React** for executing Python s
 - Real-time output streaming
 - Log history per script
 
-### 3. **Remote Kill Switch**
-- Check GitHub for `kill_switch.json` at startup
-- Blocks app if `"blocked": true`
-- Requires internet connection
-- No way to bypass without modifying binary
-
-### 4. **Auto-Update**
+### 3. **Auto-Update**
 - Updates app from GitHub releases
 - Syncs Python scripts from repository
 - Automatic dependency installation
@@ -67,7 +59,6 @@ A modern desktop application built with **Tauri + React** for executing Python s
 
 ⚠️ **Internet connection required on first launch** - Application needs network access to:
 - Clone scripts repository from GitHub (first launch only)
-- Check kill switch status
 - Install Python dependencies
 - Auto-update the application
 
@@ -91,7 +82,6 @@ script-runner/
 ├── src-tauri/             # Rust backend
 │   ├── src/
 │   │   ├── main.rs        # Tauri app entry
-│   │   ├── kill_switch.rs # Remote block logic
 │   │   ├── git_manager.rs # Git sync
 │   │   ├── python_runner.rs # Execute scripts
 │   │   └── dependency_manager.rs # Pip + AST
@@ -139,23 +129,7 @@ Create `.env` in project root:
 
 ```
 SCRIPTS_REPO_URL=https://github.com/PatrykEmilLibert/python-scripts
-KILL_SWITCH_REPO=https://github.com/PatrykEmilLibert/script-runner-config
 ```
-
-### Kill Switch Setup
-
-1. Create `kill_switch.json` in your config repo:
-
-```json
-{
-  "blocked": false,
-  "timestamp": "2026-01-20T12:00:00"
-}
-```
-
-2. Set `KILL_SWITCH_REPO` to your config repository URL
-3. To block: set `"blocked": true` and push to GitHub
-4. App checks on startup (requires internet connection)
 
 ## How It Works
 
@@ -179,27 +153,9 @@ Executes script with embedded Python
 Captures output & saves logs
 ```
 
-### Kill Switch Flow
-
-```
-App starts
-↓
-Fetches kill_switch.json from GitHub
-↓
-If no internet → Show error & exit
-↓
-If blocked=true → Show blocking screen & exit
-↓
-If clear → Proceed normally
-```
-
 ## API Commands (Rust → React)
 
 ```rust
-// Check if app is blocked
-#[tauri::command]
-async fn check_kill_switch() -> Result<bool, String>
-
 // Sync scripts from GitHub
 #[tauri::command]
 async fn sync_scripts(state: State<AppState>) -> Result<String, String>
@@ -239,15 +195,13 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 - Use VPN for script repositories
 - Implement user authentication
 - Monitor script execution logs
-- Use kill switch for emergency lockdown
 
 ## Next Steps
 
 1. ✅ Set up GitHub repositories
 2. ✅ Add your Python scripts
-3. ✅ Create kill_switch.json config
-4. ✅ Build standalone executables
-5. ✅ Distribute to team
+3. ✅ Build standalone executables
+4. ✅ Distribute to team
 
 ## Tech Stack
 
@@ -283,7 +237,6 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 ```
 [Placeholder: Admin panel interface]
 - Admin key authentication
-- Kill Switch status indicator
 - Drag & drop script upload
 - System diagnostics panel
 ```
@@ -301,7 +254,7 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 
 - 📖 **[README.md](README.md)** - This file (overview & quick start)
 - 🔄 **[UPGRADE_GUIDE.md](UPGRADE_GUIDE.md)** - What's new & migration steps
-- 🛡️ **[ADMIN_GUIDE.md](ADMIN_GUIDE.md)** - Admin panel & kill switch management
+- 🐖 **[ADMIN_GUIDE.md](ADMIN_GUIDE.md)** - Admin panel management
 - ✅ **[TESTING.md](TESTING.md)** - Complete testing checklist
 - 🚀 **[QUICK_START.md](QUICK_START.md)** - Getting started quickly
 - 📋 **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Technical overview

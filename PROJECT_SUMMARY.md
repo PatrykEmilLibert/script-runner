@@ -39,7 +39,6 @@ script-runner/
 │   ├── src-tauri/
 │   │   ├── src/
 │   │   │   ├── main.rs              # Entry point (5 API commands)
-│   │   │   ├── kill_switch.rs       # Remote block logic
 │   │   │   ├── git_manager.rs       # GitHub sync
 │   │   │   ├── python_runner.rs     # Script execution
 │   │   │   └── dependency_manager.rs # AST + pip (250+ lines!)
@@ -84,21 +83,14 @@ script-runner/
 - Responsive grid layout
 - Beautiful sidebar navigation
 
-### 3. **Remote Kill Switch** 🛡️
-- Checks GitHub for `kill_switch.json` at startup
-- Blocks app if `"blocked": true`
-- Requires internet connection
-- Can block all users instantly
-- No way to bypass (hardened binary)
-
-### 4. **Desktop App** 💻
+### 3. **Desktop App** 💻
 - Tauri (lightweight Electron alternative)
 - Standalone executables for Windows & Mac
 - No runtime dependencies required
 - Self-contained (includes Python 3.12.9)
 - Auto-updates from GitHub Releases
 
-### 5. **Script Management** 📚
+### 4. **Script Management** 📚
 - Auto-sync from GitHub repository
 - List available scripts
 - One-click execution
@@ -134,23 +126,14 @@ script-runner/
 
 ### Step 1: GitHub Setup
 ```bash
-# Create two repositories
+# Create repository
 1. python-scripts            # Your Python scripts
-2. script-runner-config      # Kill switch config
-
-# In script-runner-config repo, create:
-kill_switch.json:
-{
-  "blocked": false,
-  "timestamp": "2026-01-20T..."
-}
 ```
 
 ### Step 2: Environment Config
 ```bash
 # In script-runner repo root, create .env:
 SCRIPTS_REPO_URL=https://github.com/YOU/python-scripts
-KILL_SWITCH_REPO=https://github.com/YOU/script-runner-config
 ```
 
 ### Step 3: First Build
@@ -187,7 +170,6 @@ Ready? → npm run tauri build → Get .exe/.dmg
 
 ## 🛡️ Security Features
 
-✅ **Kill Switch**: Remote emergency block
 ✅ **Signature Verification**: Can add code signing
 ✅ **Sandboxing**: Rust backend isolation
 ✅ **Audit Logs**: All script executions logged
@@ -239,12 +221,11 @@ Each file has specific purpose:
 ## ✨ Next Steps
 
 1. ✅ **Create scripts repo on GitHub**
-2. ✅ **Create config repo with kill_switch.json**
-3. ✅ **Set `.env` with correct URLs**
-4. ✅ **Test locally: `npm run tauri dev`**
-5. ✅ **Build: `npm run tauri build`**
-6. ✅ **Release on GitHub**
-7. ✅ **Share with team!**
+2. ✅ **Set `.env` with correct URLs**
+3. ✅ **Test locally: `npm run tauri dev`**
+4. ✅ **Build: `npm run tauri build`**
+5. ✅ **Release on GitHub**
+6. ✅ **Share with team!**
 
 ---
 

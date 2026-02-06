@@ -55,7 +55,6 @@ npm run tauri build
 Create `.env` file in project root:
 ```
 SCRIPTS_REPO_URL=https://github.com/YOUR_USERNAME/python-scripts
-KILL_SWITCH_REPO=https://github.com/YOUR_USERNAME/script-runner-config
 ```
 
 ## For End Users

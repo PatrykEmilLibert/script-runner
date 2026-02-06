@@ -36,11 +36,11 @@ export default function ScriptExecutor({ script, onOutput, onFavoriteToggle, isF
 
       const result: string = await invoke("run_script", { scriptName: script, args: null });
       onOutput(result);
-      await sendNotification(t('messages.scriptCompleted'), `${script}`);
+      await sendNotification(t('messages.scriptCompleted'), `${script}`, 'success', { sound: false });
     } catch (error) {
       const errorMsg = `Error: ${error}`;
       onOutput(errorMsg);
-      await sendNotification(t('messages.scriptFailed'), `${script}`);
+      await sendNotification(t('messages.scriptFailed'), `${script}`, 'error', { sound: false });
     } finally {
       setIsRunning(false);
     }

@@ -22,7 +22,7 @@ git commit -m "Initial commit: ScriptRunner - Python Script Executor with Tauri 
 1. Zaloguj się do GitHub
 2. Kliknij **"+"** → **"New repository"**
 3. Nazwa: `script-runner` lub `python-script-executor`
-4. Opis: `Cross-platform Python script executor with auto-updates, kill switch, and dependency management`
+4. Opis: `Cross-platform Python script executor with auto-updates and dependency management`
 5. **⚠️ NIE zaznaczaj:** "Initialize with README" (masz już pliki)
 6. Wybierz **Private** lub **Public** (zalecam Private dla enterprise)
 7. Kliknij **"Create repository"**
@@ -40,39 +40,9 @@ git branch -M main
 git push -u origin main
 ```
 
-## Krok 3: Stwórz Kill Switch Repository
-
-Kill switch wymaga osobnego PRYWATNEGO repo dla bezpieczeństwa:
-
-### A. Stwórz nowe repo:
-
-1. GitHub → **"New repository"**
-2. Nazwa: `script-runner-config` (MUSI być private!)
-3. **Private** ✅ (WAŻNE!)
-4. Initialize with README ✅
-5. Create
-
-### B. Dodaj kill_switch.json:
-
-```bash
-# Sklonuj repo config
-cd P:\python_runner_github
-git clone https://github.com/YOUR_USERNAME/script-runner-config.git
-cd script-runner-config
-
-# Stwórz kill switch file
-echo '{"blocked": false}' > kill_switch.json
-
-# Commit i push
-git add kill_switch.json
-git commit -m "Add kill switch configuration"
-git push
-```
-
-## Krok 4: GitHub Personal Access Token (PAT)
+## Krok 3: GitHub Personal Access Token (PAT)
 
 Potrzebny do:
-- Kill switch sprawdzania (publiczny dostęp)
 - GitHub Actions (auto-build)
 - Auto-updates
 
@@ -80,7 +50,7 @@ Potrzebny do:
 
 1. GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
 2. **"Generate new token (classic)"**
-3. Nazwa: `ScriptRunner Kill Switch`
+3. Nazwa: `ScriptRunner GitHub Access`
 4. Expiration: **No expiration** (lub 1 rok)
 5. Scopes:
    - ✅ `repo` (pełny dostęp do prywatnych repo)
@@ -88,7 +58,7 @@ Potrzebny do:
 6. **Generate token**
 7. **⚠️ SKOPIUJ TOKEN TERAZ** - nie zobaczysz go ponownie!
 
-## Krok 5: Zaktualizuj Kod z Twoimi Danymi
+## Krok 4: Zaktualizuj Kod z Twoimi Danymi
 
 ### A. .env file (lokalne testy):
 
@@ -98,23 +68,11 @@ cd P:\python_runner_github\script-runner
 # Stwórz .env
 @"
 SCRIPTS_REPO_URL=https://github.com/PatrykEmilLibert/python-scripts
-KILL_SWITCH_REPO=PatrykEmilLibert/script-runner-config
 GITHUB_TOKEN=ghp_YourPersonalAccessTokenHere
 "@ | Out-File -FilePath .env -Encoding UTF8
 ```
 
-### B. Zaktualizuj kill_switch.rs:
-
-Otwórz `src-tauri/src/kill_switch.rs` i zmień URL:
-
-```rust
-// Linia ~10
-.get("https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json")
-```
-
-URL już zaktualizowany dla Twojego konta.
-
-## Krok 6: GitHub Actions Secrets
+## Krok 5: GitHub Actions Secrets
 
 Dla automatycznego budowania i releasów:
 
@@ -134,7 +92,7 @@ APPLE_ID
 APPLE_PASSWORD
 ```
 
-## Krok 7: Stwórz Scripts Repository
+## Krok 6: Stwórz Scripts Repository
 
 Jeśli chcesz synchronizować skrypty z GitHub:
 
@@ -157,29 +115,7 @@ git remote add origin https://github.com/PatrykEmilLibert/python-scripts.git
 git push -u origin main
 ```
 
-## Krok 8: Testuj Kill Switch
-
-```bash
-# 1. Sprawdź czy aplikacja działa
-npm run tauri dev
-
-# 2. Zmień kill_switch.json w repo config
-cd P:\python_runner_github\script-runner-config
-echo '{"blocked": true}' > kill_switch.json
-git add kill_switch.json
-git commit -m "Test: Block application"
-git push
-
-# 3. Uruchom aplikację ponownie - powinna być zablokowana!
-
-# 4. Odblokuj
-echo '{"blocked": false}' > kill_switch.json
-git add kill_switch.json
-git commit -m "Unblock application"
-git push
-```
-
-## Krok 9: GitHub Releases dla Auto-Update
+## Krok 7: GitHub Releases dla Auto-Update
 
 ### A. Tag pierwszego release:
 
@@ -196,7 +132,7 @@ git push origin v0.1.0
 - Zbuduje macOS .dmg
 - Stworzy GitHub Release z instalatorami
 
-## Krok 10: Zabezpieczenia
+## Krok 8: Zabezpieczenia
 
 ### ⚠️ NIGDY NIE COMMITUJ:
 
@@ -213,7 +149,6 @@ git push origin v0.1.0
 ```
 ✅ Używaj .env dla secrets
 ✅ GitHub Secrets dla CI/CD
-✅ Private repo dla kill switch
 ✅ Review code przed commit
 ✅ Używaj signed commits (opcjonalne)
 ```
@@ -228,7 +163,7 @@ git status
 git check-ignore -v node_modules/
 ```
 
-## Krok 11: Signed Commits (Opcjonalne - Bezpieczeństwo++)
+## Krok 9: Signed Commits (Opcjonalne - Bezpieczeństwo++)
 
 ```bash
 # Generate GPG key
@@ -247,7 +182,7 @@ git config --global user.signingkey YOUR_KEY_ID
 git config --global commit.gpgsign true
 ```
 
-## Krok 12: Workflow dla Zespołu
+## Krok 10: Workflow dla Zespołu
 
 ### Dla developerów:
 
@@ -276,7 +211,7 @@ git push origin feature/new-feature
 1. Idź do: https://github.com/PatrykEmilLibert/script-runner/releases
 2. Pobierz najnowszy .exe (Windows) lub .dmg (Mac)
 3. Zainstaluj
-4. Aplikacja automatycznie sprawdzi kill switch i sync scripts
+4. Aplikacja automatycznie zsynchronizuje skrypty
 ```
 
 ## Podsumowanie - Quick Start
@@ -290,16 +225,15 @@ git commit -m "Initial commit"
 git remote add origin https://github.com/YOUR_USERNAME/script-runner.git
 git push -u origin main
 
-# 2. Stwórz kill switch repo (przez GitHub.com)
-# 3. Clone i dodaj kill_switch.json
+# 2. Stwórz scripts repo (przez GitHub.com)
+# 3. Clone i dodaj scripts
 cd ..
-git clone https://github.com/PatrykEmilLibert/script-runner-config.git
-cd script-runner-config
-echo '{"blocked": false}' > kill_switch.json
-git add . && git commit -m "Add kill switch" && git push
+git clone https://github.com/PatrykEmilLibert/python-scripts.git
+cd python-scripts
+# dodaj swoje skrypty
+git add . && git commit -m "Add scripts" && git push
 
-# 4. Zaktualizuj kill_switch.rs z Twoim username
-# 5. Tag release
+# 4. Tag release
 cd ../script-runner
 git tag v0.1.0
 git push origin v0.1.0
@@ -321,13 +255,6 @@ git push origin v0.1.0
 # Lub skonfiguruj credential manager
 git config --global credential.helper manager-core
 ```
-
-### "Kill switch nie działa"
-
-1. Sprawdź czy repo `script-runner-config` jest **private**
-2. Sprawdź URL w `kill_switch.rs`
-3. Sprawdź format JSON: `{"blocked": false}` (bez spacji)
-4. Test: `curl https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json`
 
 ### "GitHub Actions build fails"
 

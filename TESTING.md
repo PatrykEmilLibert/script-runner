@@ -137,12 +137,6 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
   - Success notification appears
   - Panel unlocks immediately
 
-- [ ] **Kill Switch Section**
-  - Current status displayed (🟢/🔴)
-  - Last check timestamp shown
-  - "Refresh" button works
-  - Auto-refresh every 5 minutes
-
 - [ ] **Script Upload**
   - Drag & drop zone visible
   - Accepts `.py` files only
@@ -179,62 +173,6 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
   - Clear instructions shown
   - Generate key prompt visible
   - Help text displayed
-
----
-
-## 🔐 Kill Switch Testing
-
-### Block Scenario
-
-- [ ] **Setup**
-  - Edit `kill_switch.json` on GitHub
-  - Set `"blocked": true`
-  - Add `"reason": "Test block"`
-  - Commit and push
-
-- [ ] **App Launch**
-  - App fetches kill switch on startup
-  - Blocking screen displayed
-  - Reason message shown
-  - Cannot bypass block
-  - Exit button works
-
-- [ ] **Admin Panel Refresh**
-  - Status changes to 🔴 Blocked
-  - Last check timestamp updates
-  - Reason displayed in admin panel
-
-### Unblock Scenario
-
-- [ ] **Setup**
-  - Edit `kill_switch.json` on GitHub
-  - Set `"blocked": false`
-  - Update timestamp
-  - Commit and push
-
-- [ ] **App Launch**
-  - App allows normal launch
-  - No blocking screen
-  - App functions normally
-
-- [ ] **Admin Panel Refresh**
-  - Status changes to 🟢 Active
-  - Last check timestamp updates
-
-### Error Handling
-
-- [ ] **No Internet Connection**
-  - Error message shown
-  - App does not launch
-  - Clear instructions provided
-
-- [ ] **GitHub Rate Limit**
-  - Graceful error handling
-  - Retry mechanism works
-
-- [ ] **Invalid JSON**
-  - Error logged to console
-  - App defaults to safe behavior
 
 ---
 
@@ -501,11 +439,6 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
 ## 🌐 Network & API Testing
 
 ### GitHub API
-
-- [ ] **Fetch Kill Switch**
-  - Successful fetch
-  - Rate limit handling
-  - Timeout handling
 
 - [ ] **Fetch Scripts**
   - Clone/pull repository

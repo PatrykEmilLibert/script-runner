@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Admin Panel provides advanced management features for ScriptRunner administrators. It requires authentication via an admin key and offers control over the kill switch, script management, and system diagnostics.
+The Admin Panel provides advanced management features for ScriptRunner administrators. It requires authentication via an admin key and offers control over script management and system diagnostics.
 
 ---
 
@@ -30,92 +30,6 @@ The Admin Panel provides advanced management features for ScriptRunner administr
 - ❌ **Don't hardcode** in scripts
 - ❌ **Don't commit** to version control
 - ❌ **Don't send** via email/chat
-
----
-
-## 🛡️ Kill Switch Management
-
-### What is the Kill Switch?
-
-The Kill Switch is a remote emergency stop mechanism that allows you to instantly block all instances of ScriptRunner across your organization.
-
-**Use Cases:**
-- Security breach detected
-- Malicious script uploaded
-- Emergency maintenance
-- Compliance requirements
-- License expiration
-
-### How It Works
-
-1. **Startup Check**: App fetches `kill_switch.json` from GitHub on launch
-2. **Status Evaluation**: Checks `"blocked": true/false`
-3. **Blocking**: If blocked, shows error screen and exits
-4. **Bypass**: No way to bypass without modifying the binary
-
-### Configuration File
-
-**Location**: `https://github.com/[your-org]/script-runner-config/kill_switch.json`
-
-**Structure**:
-```json
-{
-  "blocked": false,
-  "timestamp": "2026-02-05T10:30:00Z",
-  "reason": "",
-  "admin_contact": "admin@company.com"
-}
-```
-
-**Fields**:
-- `blocked` (boolean): `true` = block all instances, `false` = allow
-- `timestamp` (ISO 8601): When status was last changed
-- `reason` (string): Optional message shown to users
-- `admin_contact` (string): Contact info for support
-
-### Blocking All Instances
-
-**Step-by-step:**
-
-1. Go to your `script-runner-config` repository on GitHub
-2. Edit `kill_switch.json`
-3. Change `"blocked": false` to `"blocked": true`
-4. Update `timestamp` to current UTC time
-5. Add `reason`: `"Emergency maintenance - contact IT"`
-6. Commit and push changes
-7. **Result**: All app instances will be blocked on next launch
-
-**Example**:
-```json
-{
-  "blocked": true,
-  "timestamp": "2026-02-05T14:22:00Z",
-  "reason": "Security update in progress. Contact admin@company.com",
-  "admin_contact": "admin@company.com"
-}
-```
-
-### Unblocking
-
-1. Edit `kill_switch.json` on GitHub
-2. Change `"blocked": true` to `"blocked": false`
-3. Update `timestamp`
-4. Clear `reason` field
-5. Commit and push
-6. Users can now launch the app
-
-### Checking Status in Admin Panel
-
-The Admin Panel shows:
-- **Current Status**: 🟢 Active / 🔴 Blocked
-- **Last Check**: Timestamp of last fetch
-- **Refresh Button**: Manual status check
-- **Auto-refresh**: Every 5 minutes (when panel is open)
-
-**Indicators**:
-- 🟢 **Green Badge** = App is active
-- 🔴 **Red Badge** = App is blocked
-- ⚠️ **Yellow Badge** = Unable to fetch (network error)
 
 ---
 
@@ -236,7 +150,6 @@ The Admin Panel displays:
 
 ### Configuration
 - **Scripts Repository**: GitHub URL for scripts
-- **Kill Switch URL**: GitHub URL for config
 - **Scripts Directory**: Local path to cached scripts
 - **Logs Directory**: Local path to execution logs
 - **Analytics DB**: Path to SQLite database
@@ -316,17 +229,6 @@ The Admin Panel displays:
 4. Check browser console for errors
 5. Restart app and retry
 
-### Kill Switch Not Updating
-
-**Symptom**: Status shows stale data
-
-**Solutions**:
-1. Click **"Refresh"** button manually
-2. Check internet connection
-3. Verify `KILL_SWITCH_REPO` URL in `.env`
-4. Check GitHub repository permissions
-5. Look for rate limiting (GitHub API)
-
 ### Script Upload Fails
 
 **Symptom**: Upload button shows error
@@ -377,22 +279,6 @@ The Admin Panel displays:
 - Never transmitted over network
 - Not logged or tracked
 
-### Kill Switch Security
-
-**Potential Risks:**
-- ⚠️ GitHub repository must be private
-- ⚠️ Limit write access to authorized admins only
-- ⚠️ Enable 2FA for GitHub accounts
-- ⚠️ Monitor repository audit logs
-- ⚠️ Use branch protection rules
-
-**Mitigation:**
-1. Store `kill_switch.json` in **private** repository
-2. Restrict access to admin team
-3. Enable branch protection (require reviews)
-4. Audit all changes to kill switch
-5. Have rollback procedure ready
-
 ### Script Upload Security
 
 **Risks:**
@@ -412,7 +298,6 @@ The Admin Panel displays:
 ## 📋 Admin Checklist
 
 ### Daily Tasks
-- [ ] Check kill switch status
 - [ ] Review analytics for anomalies
 - [ ] Monitor notification logs
 - [ ] Verify backup scripts sync
@@ -440,18 +325,6 @@ The Admin Panel displays:
 
 ## 🆘 Emergency Procedures
 
-### Immediate Kill Switch Activation
-
-**Scenario**: Security breach detected
-
-**Actions** (5-minute response):
-1. Open GitHub → `script-runner-config` repo
-2. Edit `kill_switch.json` → `"blocked": true`
-3. Add reason: `"Emergency: Security incident - All access suspended"`
-4. Commit and push immediately
-5. Notify all users via email/Slack
-6. Begin incident investigation
-
 ### Revoking Compromised Admin Key
 
 **Scenario**: Admin key leaked
@@ -468,11 +341,10 @@ The Admin Panel displays:
 **Scenario**: Malicious script detected
 
 **Actions** (15-minute response):
-1. Activate kill switch (block all access)
-2. Remove script from GitHub repository
-3. Force sync on all client machines
-4. Scan for damage/data exfiltration
-5. Unblock after verification
+1. Remove script from GitHub repository
+2. Force sync on all client machines
+3. Scan for damage/data exfiltration
+4. Notify affected users
 
 ---
 

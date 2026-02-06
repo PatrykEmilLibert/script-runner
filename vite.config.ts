@@ -16,6 +16,15 @@ export default defineConfig({
           port: 1421,
         }
       : "localhost",
+    watch: {
+      // Ignore external script repo to prevent auto-restart during sync
+      ignored: [
+        "**/script-runner-scripts/**",
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/target/**"
+      ]
+    }
   },
   build: {
     target: ["es2021", "chrome100"],

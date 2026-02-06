@@ -9,7 +9,6 @@ Stworzyłem **pełnoprawną desktopową aplikację** do uruchamiania Python skry
 ✅ **Elegancki UI** - Dark mode z efektami glassmorphism
 ✅ **Auto-Update** - Synkuje skrypty z GitHub automatycznie
 ✅ **Smart Dependencies** - AST parser automatycznie detektuje i instaluje zależności
-✅ **Kill Switch** - Zablokuj aplikację dla wszystkich z GitHub
 ✅ **Standalone** - Brak wymaganych zależności, jedno kliknięcie instalacji
 ✅ **Cross-Platform** - Windows & Mac
 
@@ -104,20 +103,7 @@ print(json.dumps(data, indent=2))
 - Modern glassmorphism design
 - Inspirowane narzędziami jak: Cursor, Discord, Figma
 
-### 3. Kill Switch
-
-Ustawisz w GitHub:
-```json
-{
-  "blocked": true
-}
-```
-
-→ **Wszystkie aplikacje się zamkną natychmiast**
-
-Nie można obejść (hardened binary, wymaga internetu)
-
-### 4. GitHub Actions CI/CD
+### 3. GitHub Actions CI/CD
 
 - Auto-build na Windows + Mac na każdy tag
 - Auto-release do GitHub
@@ -127,34 +113,24 @@ Nie można obejść (hardened binary, wymaga internetu)
 
 ### Ustawienie dla zespołu
 
-1. **Utwórz 2 GitHub repozytoria:**
+1. **Utwórz GitHub repozytorium:**
    ```
    your-org/python-scripts         # Twoje skrypty
-   your-org/script-runner-config   # Kill switch config
    ```
 
 2. **Plik `.env` w script-runner:**
    ```
    SCRIPTS_REPO_URL=https://github.com/you/python-scripts
-   KILL_SWITCH_REPO=https://github.com/you/script-runner-config
    ```
 
-3. **Kill switch repo - plik `kill_switch.json`:**
-   ```json
-   {
-     "blocked": false,
-     "timestamp": "2026-01-20T..."
-   }
-   ```
-
-4. **Build & Release:**
+3. **Build & Release:**
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
    # GitHub Actions auto-builds → Release assets
    ```
 
-5. **Podziel się z zespołem:**
+4. **Podziel się z zespołem:**
    - Wyślij link do Release
    - Oni pobierają `.exe` (Windows) lub `.dmg` (Mac)
    - Klikają installer → Gotowe!
@@ -249,7 +225,6 @@ Nie można obejść (hardened binary, wymaga internetu)
 
 ## 🔐 Security
 
-✅ Hardened kill switch
 ✅ Internet connection required
 ✅ Code signing ready
 ✅ Sandboxed execution

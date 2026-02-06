@@ -12,6 +12,7 @@ mod admin_key;
 mod analytics;
 mod dependency_manager;
 mod git_manager;
+mod github_auth;
 mod kill_switch;
 mod kill_switch_manager;
 mod python_runner;
@@ -438,7 +439,7 @@ async fn get_script_logs(
 
 #[tauri::command]
 fn check_admin_key() -> Result<bool, String> {
-    // Resolve admin key path with env override and cross-platform Desktop detection
+    // Legacy admin key check - kept for backward compatibility
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
@@ -478,8 +479,43 @@ fn check_admin_key() -> Result<bool, String> {
 
     let is_valid = candidates.iter().any(|p| admin_key::validate_key_file(p));
 
-    log::info!("Admin key check: {}", is_valid);
+    log::info!("Legacy admin key check: {}", is_valid);
     Ok(is_valid)
+}
+
+// GitHub Authentication Commands
+
+#[tauri::command]
+async fn github_login(token: String) -> Result<github_auth::AuthSession, String> {
+    github_auth::github_login(token).await
+}
+
+#[tauri::command]
+fn github_logout() -> Result<(), String> {
+    github_auth::github_logout()
+}
+
+#[tauri::command]
+fn get_github_user() -> Result<Option<github_auth::GitHubUser>, String> {
+    github_auth::get_current_user()
+}
+
+#[tauri::command]
+async fn check_admin_status() -> Result<bool, String> {
+    // Check GitHub auth first (new method)
+    match github_auth::check_admin_status().await {
+        Ok(true) => return Ok(true),
+        Ok(false) => {}
+        Err(e) => log::warn!("GitHub admin check failed: {}", e),
+    }
+    
+    // Fallback to legacy admin key
+    check_admin_key()
+}
+
+#[tauri::command]
+async fn refresh_github_admin_status() -> Result<bool, String> {
+    github_auth::refresh_admin_status().await
 }
 
 #[tauri::command]
@@ -677,7 +713,12 @@ fn main() {
             script_manager::get_local_scripts,
             update_all_dependencies,
             check_admin_key,
+            check_admin_status,
             get_admin_key_info,
+            github_login,
+            github_logout,
+            get_github_user,
+            refresh_github_admin_status,
             get_run_history,
             export_history_as_csv,
             toggle_dark_mode,

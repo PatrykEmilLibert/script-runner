@@ -42,8 +42,6 @@ Use this checklist when deploying ScriptRunner to your team.
 ## Infrastructure ✅
 
 - [ ] Scripts repository created
-- [ ] Kill switch repository created
-- [ ] `kill_switch.json` initialized
 - [ ] GitHub Actions workflows set up
 - [ ] All environment variables configured
 - [ ] Logging directory exists
@@ -98,9 +96,8 @@ Use this checklist when deploying ScriptRunner to your team.
 If issues in production:
 
 1. **For app update:**
-   - Create `kill_switch.json` with `blocked: true`
-   - Push to GitHub immediately
-   - All apps will stop within seconds
+   - Release previous version
+   - Notify users to download
 
 2. **For scripts:**
    - Revert bad script in repo
