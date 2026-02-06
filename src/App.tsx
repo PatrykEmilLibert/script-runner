@@ -63,6 +63,7 @@ export default function App() {
     unreadCount,
   } = useNotifications();
   const [appBlocked, setAppBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState<string>("");
   const [networkError, setNetworkError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [scripts, setScripts] = useState<string[]>([]);
@@ -216,10 +217,16 @@ export default function App() {
     const initApp = async () => {
       try {
         // Check kill switch
-        const blocked: boolean = await invoke("check_kill_switch");
-        if (blocked) {
-          setAppBlocked(true);
-          return;
+        try {
+          const killSwitchConfig: any = await invoke("check_kill_switch_status");
+          if (killSwitchConfig.blocked) {
+            setAppBlocked(true);
+            setBlockReason(killSwitchConfig.message || killSwitchConfig.reason || "Application access is currently restricted");
+            return;
+          }
+        } catch (ksError) {
+          console.warn("Kill switch check failed:", ksError);
+          // Continue if kill switch check fails
         }
 
         // Check admin status (GitHub auth or legacy admin key)
@@ -386,10 +393,20 @@ export default function App() {
 
   if (appBlocked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900 dark:bg-gray-950">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-4">{t('app.title')}</h1>
-          <p className="text-gray-400">{t('messages.invalidAdminKey')}</p>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-950">
+        <div className="max-w-md text-center p-8">
+          <div className="mb-6">
+            <IconShield size={64} className="mx-auto text-red-500 mb-4" />
+            <h1 className="text-3xl font-bold text-white mb-2">Access Restricted</h1>
+          </div>
+          <div className="bg-gray-800 border-2 border-red-500/50 rounded-lg p-6 mb-4">
+            <p className="text-gray-300 text-lg">
+              {blockReason}
+            </p>
+          </div>
+          <p className="text-gray-500 text-sm">
+            Please contact your administrator for assistance
+          </p>
         </div>
       </div>
     );
