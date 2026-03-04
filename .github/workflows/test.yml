@@ -37,6 +37,12 @@ jobs:
             libayatana-appindicator3-dev \
             pkg-config \
             build-essential
+      - name: Prepare frontendDist placeholder for Tauri compile checks
+        run: |
+          mkdir -p dist
+          if [ ! -f dist/index.html ]; then
+            printf '<!doctype html><html><body>CI placeholder</body></html>\n' > dist/index.html
+          fi
       - run: cargo fmt --manifest-path=src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
 
