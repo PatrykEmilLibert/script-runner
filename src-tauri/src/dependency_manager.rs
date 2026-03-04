@@ -6,11 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
 
+use crate::script_encryption;
+use crate::script_manager;
+
 // Map import names to pip package names for packages with mismatched names
 // Based on common PyPI package name mismatches
 fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::new();
-    
+
     // Machine Learning & Data Science
     map.insert("sklearn", "scikit-learn");
     map.insert("cv2", "opencv-python");
@@ -19,22 +22,22 @@ fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     map.insert("tensorflow", "tensorflow");
     map.insert("keras", "keras");
     map.insert("xgboost", "xgboost");
-    
+
     // Image & Media
     map.insert("PIL", "Pillow");
     map.insert("Image", "Pillow");
     map.insert("docx", "python-docx");
     map.insert("pptx", "python-pptx");
-    
+
     // Configuration & Data Formats
     map.insert("yaml", "pyyaml");
     map.insert("tomli", "tomli");
-    
+
     // Web Scraping & Parsing
     map.insert("bs4", "beautifulsoup4");
     map.insert("lxml", "lxml");
     map.insert("html5lib", "html5lib");
-    
+
     // Database Drivers
     map.insert("MySQLdb", "mysqlclient");
     map.insert("psycopg2", "psycopg2-binary");
@@ -42,83 +45,83 @@ fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     map.insert("sqlite3", "sqlite3");
     map.insert("pymongo", "pymongo");
     map.insert("redis", "redis");
-    
+
     // Environment & Configuration
     map.insert("dotenv", "python-dotenv");
     map.insert("dateutil", "python-dateutil");
     map.insert("serial", "pyserial");
     map.insert("configparser", "configparser");
-    
+
     // HTTP & Network
     map.insert("requests", "requests");
     map.insert("urllib3", "urllib3");
     map.insert("httpx", "httpx");
-    
+
     // Async & Async HTTP
     map.insert("aiohttp", "aiohttp");
     map.insert("httplib2", "httplib2");
-    
+
     // Testing
     map.insert("pytest", "pytest");
     map.insert("mock", "mock");
-    
+
     // Text Processing & NLP
     map.insert("nltk", "nltk");
     map.insert("spacy", "spacy");
     map.insert("textblob", "textblob");
-    
+
     // Cryptography
     map.insert("Crypto", "pycryptodome");
     map.insert("cryptography", "cryptography");
-    
+
     // Data Format Parsing
     map.insert("openpyxl", "openpyxl");
     map.insert("xlrd", "xlrd");
     map.insert("xlwt", "xlwt");
-    
+
     // Scientific Computing
     map.insert("scipy", "scipy");
     map.insert("sympy", "sympy");
     map.insert("pandas", "pandas");
     map.insert("numpy", "numpy");
-    
+
     // Visualization
     map.insert("matplotlib", "matplotlib");
     map.insert("plotly", "plotly");
     map.insert("seaborn", "seaborn");
     map.insert("bokeh", "bokeh");
-    
+
     // PDF Processing
     map.insert("PyPDF2", "PyPDF2");
     map.insert("pdfplumber", "pdfplumber");
     map.insert("reportlab", "reportlab");
-    
+
     // Command Line & Terminal
     map.insert("click", "click");
     map.insert("typer", "typer");
     map.insert("rich", "rich");
     map.insert("colorama", "colorama");
-    
+
     // Date & Time
     map.insert("arrow", "arrow");
     map.insert("pendulum", "pendulum");
     map.insert("pytz", "pytz");
-    
+
     // File & Path Processing
     map.insert("pathlib2", "pathlib2");
     map.insert("watchdog", "watchdog");
-    
+
     // Compression & Archives
     map.insert("tarfile", "tarfile");
     map.insert("zipfile", "zipfile");
     map.insert("gzip", "gzip");
     map.insert("rarfile", "rarfile");
-    
+
     // JSON & Serialization
     map.insert("ujson", "ujson");
     map.insert("orjson", "orjson");
     map.insert("msgpack", "msgpack");
-    
+
     // API & Web Frameworks
     map.insert("flask", "flask");
     map.insert("django", "django");
@@ -126,13 +129,13 @@ fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     map.insert("starlette", "starlette");
     map.insert("bottle", "bottle");
     map.insert("tornado", "tornado");
-    
+
     // Utilities
     map.insert("pydantic", "pydantic");
     map.insert("attrs", "attrs");
     map.insert("six", "six");
     map.insert("future", "future");
-    
+
     map
 }
 
@@ -258,17 +261,17 @@ const STDLIB_MODULES: &[&str] = &[
 fn is_stdlib(module: &str) -> bool {
     // Extract package name (before any version specifier or extras)
     let package = module
-        .split(|c: char| c == '=' || c == '>' || c == '<' || c == '!' || c == '[' || c == ' ')
+        .split(['=', '>', '<', '!', '[', ' '])
         .next()
         .unwrap_or(module)
         .trim();
-    
+
     STDLIB_MODULES.contains(&package)
 }
 
 fn filter_stdlib_from_requirements(content: &str) -> Vec<String> {
     let import_map = get_import_to_package_map();
-    
+
     content
         .lines()
         .map(|line| line.trim())
@@ -277,11 +280,11 @@ fn filter_stdlib_from_requirements(content: &str) -> Vec<String> {
         .map(|s| {
             // Extract package name (without version specifiers)
             let package = s
-                .split(|c: char| c == '=' || c == '>' || c == '<' || c == '!' || c == '[' || c == ' ')
+                .split(['=', '>', '<', '!', '[', ' '])
                 .next()
                 .unwrap_or(s)
                 .trim();
-            
+
             // Map import name to pip package name if needed
             let mapped = import_map.get(package).copied().unwrap_or(package);
             mapped.to_string()
@@ -372,9 +375,9 @@ pub async fn ensure_requirements(
     // Read and filter stdlib modules from requirements
     let content = fs::read_to_string(&req_path)
         .map_err(|e| format!("Failed to read requirements.txt: {}", e))?;
-    
+
     let packages = filter_stdlib_from_requirements(&content);
-    
+
     if packages.is_empty() {
         log::info!("No non-stdlib packages to install in {:?}", script_dir);
         return Ok(());
@@ -383,7 +386,7 @@ pub async fn ensure_requirements(
     log::info!("Installing packages: {:?}", packages);
 
     let output = Command::new(python_exec)
-        .args(&["-m", "pip", "install"])
+        .args(["-m", "pip", "install"])
         .args(&packages)
         .current_dir(script_dir)
         .output()
@@ -392,10 +395,10 @@ pub async fn ensure_requirements(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         // Parse pip error for better diagnostics
         let mut error_msg = format!("❌ Failed to install packages: {}\n", packages.join(", "));
-        
+
         if stderr.contains("Could not find a version") {
             error_msg.push_str("\n💡 Suggestion: Package version not found. Try:\n");
             error_msg.push_str("  • Check package name spelling\n");
@@ -418,9 +421,9 @@ pub async fn ensure_requirements(
             error_msg.push_str("  • Update CA certificates\n");
             error_msg.push_str("  • Use --trusted-host flag\n");
         }
-        
+
         error_msg.push_str(&format!("\n📋 Full error:\n{}\n{}", stdout, stderr));
-        
+
         return Err(error_msg);
     }
 
@@ -442,6 +445,8 @@ pub async fn ensure_all_scripts_requirements(
 
     let mut errors: Vec<String> = Vec::new();
     let mut aggregated: BTreeSet<String> = BTreeSet::new();
+    let official_root = scripts_root.join("official");
+    let user_root = script_manager::get_user_scripts_root(scripts_root.as_path());
 
     // Find every folder containing main.py (handles scripts/ and official/)
     for entry in WalkDir::new(scripts_root)
@@ -450,8 +455,16 @@ pub async fn ensure_all_scripts_requirements(
         .filter(|e| e.file_type().is_dir())
     {
         let dir = entry.path();
+
+        let is_official = dir.starts_with(&official_root);
+        let is_current_user_script = dir.starts_with(&user_root);
+        if !is_official && !is_current_user_script {
+            continue;
+        }
+
         let main_py = dir.join("main.py");
-        if !main_py.exists() {
+        let main_enc = dir.join("main.py.enc");
+        if !main_py.exists() && !main_enc.exists() {
             continue;
         }
 
@@ -472,7 +485,31 @@ pub async fn ensure_all_scripts_requirements(
                 )),
             }
         } else {
-            match detect_dependencies(&main_py).await {
+            let detected = if main_py.exists() {
+                detect_dependencies(&main_py).await
+            } else {
+                let temp_analysis =
+                    std::env::temp_dir().join(format!("sr_deps_{}.py", uuid::Uuid::new_v4()));
+
+                let deps_result = match script_encryption::decrypt_script(&main_enc) {
+                    Ok(content) => {
+                        if let Err(e) = fs::write(&temp_analysis, content) {
+                            Err(format!("failed to write temp decrypted script: {}", e))
+                        } else {
+                            detect_dependencies(&temp_analysis).await
+                        }
+                    }
+                    Err(e) => Err(format!(
+                        "failed to decrypt script for dependency detection: {}",
+                        e
+                    )),
+                };
+
+                let _ = fs::remove_file(&temp_analysis);
+                deps_result
+            };
+
+            match detected {
                 Ok(deps) => {
                     for dep in &deps {
                         aggregated.insert(dep.to_string());
@@ -522,7 +559,7 @@ pub async fn ensure_all_scripts_requirements(
     }
 
     let output = Command::new(python_exec)
-        .args(&["-m", "pip", "install"])
+        .args(["-m", "pip", "install"])
         .args(&combined)
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
@@ -530,19 +567,23 @@ pub async fn ensure_all_scripts_requirements(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         let mut error_msg = format!("❌ Failed to install {} packages\n", combined.len());
-        
+
         // Enhanced error diagnostics
-        if stderr.contains("Could not find a version") || stderr.contains("No matching distribution") {
+        if stderr.contains("Could not find a version")
+            || stderr.contains("No matching distribution")
+        {
             error_msg.push_str("\n💡 Some packages don't exist or have wrong names\n");
         }
         if stderr.contains("externally-managed-environment") {
-            error_msg.push_str("\n⚠️ System Python is protected - using virtual environment recommended\n");
+            error_msg.push_str(
+                "\n⚠️ System Python is protected - using virtual environment recommended\n",
+            );
         }
-        
+
         error_msg.push_str(&format!("\n📋 Details:\n{}\n{}", stdout, stderr));
-        
+
         return Err(error_msg);
     }
 
@@ -569,24 +610,24 @@ pub async fn install_dependencies(
     }
 
     let import_map = get_import_to_package_map();
-    
+
     // Map package names in case they're import names instead of pip names
     let mapped_packages: Vec<String> = packages
         .iter()
         .map(|pkg| {
             let package = pkg
-                .split(|c: char| c == '=' || c == '>' || c == '<' || c == '!' || c == '[' || c == ' ')
+                .split(['=', '>', '<', '!', '[', ' '])
                 .next()
                 .unwrap_or(pkg)
                 .trim();
-            
+
             let mapped = import_map.get(package).copied().unwrap_or(package);
             mapped.to_string()
         })
         .collect();
 
     let output = Command::new(python_exec)
-        .args(&["-m", "pip", "install"])
+        .args(["-m", "pip", "install"])
         .args(&mapped_packages)
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;

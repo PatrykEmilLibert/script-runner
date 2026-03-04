@@ -6,9 +6,9 @@
 use std::env;
 use std::path::PathBuf;
 use tauri::State;
-use serde_json;
+use chrono::TimeZone;
+use tauri_plugin_updater::UpdaterExt;
 
-mod admin_key;
 mod analytics;
 mod dependency_manager;
 mod git_manager;
@@ -16,10 +16,10 @@ mod github_auth;
 mod kill_switch;
 mod kill_switch_manager;
 mod python_runner;
-mod script_manager;
 mod run_history;
-mod settings;
 mod script_encryption;
+mod script_manager;
+mod settings;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,11 +27,143 @@ pub struct AppState {
     python_exec: PathBuf,
 }
 
+const DEFAULT_RELEASES_REPO: &str = "PatrykEmilLibert/script-runner";
+const DEFAULT_UPDATER_ENDPOINT: &str =
+    "https://github.com/PatrykEmilLibert/script-runner/releases/latest/download/latest.json";
+const COMPILED_RELEASES_REPO: Option<&str> = option_env!("SR_RELEASES_REPO");
+const COMPILED_UPDATER_ENDPOINT: Option<&str> = option_env!("SR_UPDATER_ENDPOINT");
+const COMPILED_UPDATER_PUBKEY: Option<&str> = option_env!("SR_UPDATER_PUBKEY");
+
+#[derive(Debug, serde::Serialize)]
+struct AvailableUpdateInfo {
+    version: String,
+    current_version: String,
+    notes: Option<String>,
+    pub_date: Option<String>,
+    download_url: String,
+}
+
+fn read_non_empty_env(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn releases_repo() -> String {
+    if let Some(runtime) = read_non_empty_env("SR_RELEASES_REPO") {
+        return runtime;
+    }
+
+    if let Some(compiled) = COMPILED_RELEASES_REPO {
+        let trimmed = compiled.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    DEFAULT_RELEASES_REPO.to_string()
+}
+
+fn releases_latest_api_url() -> String {
+    format!("https://api.github.com/repos/{}/releases/latest", releases_repo())
+}
+
+fn releases_page_url() -> String {
+    format!("https://github.com/{}/releases", releases_repo())
+}
+
+fn parse_version_segments(version: &str) -> Vec<u32> {
+    version
+        .trim()
+        .trim_start_matches('v')
+        .split('.')
+        .map(|part| {
+            let digits: String = part.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u32>().unwrap_or(0)
+        })
+        .collect()
+}
+
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    let latest_parts = parse_version_segments(latest);
+    let current_parts = parse_version_segments(current);
+    let max_len = latest_parts.len().max(current_parts.len());
+
+    for index in 0..max_len {
+        let latest_part = latest_parts.get(index).copied().unwrap_or(0);
+        let current_part = current_parts.get(index).copied().unwrap_or(0);
+
+        if latest_part > current_part {
+            return true;
+        }
+        if latest_part < current_part {
+            return false;
+        }
+    }
+
+    false
+}
+
+fn updater_endpoint() -> String {
+    if let Some(runtime) = read_non_empty_env("SR_UPDATER_ENDPOINT") {
+        return runtime;
+    }
+
+    if let Some(compiled) = COMPILED_UPDATER_ENDPOINT {
+        let trimmed = compiled.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    DEFAULT_UPDATER_ENDPOINT.to_string()
+}
+
+fn updater_pubkey() -> Result<String, String> {
+    if let Some(runtime) = read_non_empty_env("SR_UPDATER_PUBKEY") {
+        return Ok(runtime);
+    }
+
+    if let Some(compiled) = COMPILED_UPDATER_PUBKEY {
+        let trimmed = compiled.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    Err(
+        "Updater public key is not configured. Set SR_UPDATER_PUBKEY for build/runtime."
+            .to_string(),
+    )
+}
+
+async fn check_runtime_update(
+    app: tauri::AppHandle,
+) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    let endpoint = updater_endpoint();
+    let endpoint_url = url::Url::parse(&endpoint)
+        .map_err(|e| format!("Invalid updater endpoint '{}': {}", endpoint, e))?;
+    let pubkey = updater_pubkey()?;
+
+    let updater = app
+        .updater_builder()
+        .pubkey(pubkey)
+        .endpoints(vec![endpoint_url])
+        .map_err(|e| format!("Failed to configure updater endpoint: {}", e))?
+        .build()
+        .map_err(|e| format!("Failed to initialize updater: {}", e))?;
+
+    updater
+        .check()
+        .await
+        .map_err(|e| format!("Failed to check for updates: {}", e))
+}
+
 #[tauri::command]
 async fn read_file_content(file_path: String) -> Result<String, String> {
     use std::fs;
-    fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read file {}: {}", file_path, e))
+    fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file {}: {}", file_path, e))
 }
 
 #[tauri::command]
@@ -43,7 +175,7 @@ async fn send_desktop_notification(
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
-        
+
         // Use Windows Toast Notifications via PowerShell
         let ps_script = format!(
             r#"
@@ -72,7 +204,7 @@ async fn send_desktop_notification(
         );
 
         let output = Command::new("powershell")
-            .args(&["-NoProfile", "-Command", &ps_script])
+            .args(["-NoProfile", "-Command", &ps_script])
             .output()
             .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
 
@@ -84,7 +216,7 @@ async fn send_desktop_notification(
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        
+
         let _ = Command::new("osascript")
             .args(&[
                 "-e",
@@ -101,7 +233,7 @@ async fn send_desktop_notification(
     #[cfg(target_os = "linux")]
     {
         use std::process::Command;
-        
+
         let _ = Command::new("notify-send")
             .args(&[&title, &body])
             .output()
@@ -113,25 +245,10 @@ async fn send_desktop_notification(
 
 fn resolve_scripts_dir() -> PathBuf {
     if let Ok(custom) = env::var("SR_SCRIPTS_DIR") {
-        let p = PathBuf::from(custom);
-        if p.exists() { return p; }
+        return PathBuf::from(custom);
     }
 
-    // In development: prefer workspace-level repo outside src-tauri to avoid rebuild loops
-    #[cfg(debug_assertions)]
-    {
-        let dev_candidates = [
-            PathBuf::from("../../script-runner-scripts"),
-            PathBuf::from("../script-runner-scripts"),
-            PathBuf::from("./script-runner-scripts"),
-        ];
-
-        for c in dev_candidates.iter() {
-            if c.exists() { return c.clone(); }
-        }
-    }
-
-    // In production: use user data directory (persistent across updates)
+    // Use user data directory (persistent across updates)
     if let Some(data_dir) = dirs::data_dir() {
         let app_data = data_dir.join("ScriptRunner").join("scripts");
         log::info!("Using user data directory for scripts: {:?}", app_data);
@@ -139,8 +256,8 @@ fn resolve_scripts_dir() -> PathBuf {
     }
 
     // Final fallback (should rarely happen)
-    log::warn!("Could not determine data directory, using current directory");
-    PathBuf::from("./script-runner-scripts")
+    log::warn!("Could not determine data directory, using local ./scripts path");
+    PathBuf::from("./scripts")
 }
 
 fn resolve_python_exec() -> PathBuf {
@@ -175,7 +292,7 @@ async fn check_kill_switch() -> Result<bool, String> {
         log::warn!("Kill switch local override active: allow={}", allow);
         return Ok(!allow); // Invert because function returns "is_blocked"
     }
-    
+
     kill_switch::check_remote_status().await
 }
 
@@ -191,41 +308,53 @@ async fn get_kill_switch_status() -> Result<kill_switch::KillSwitchConfig, Strin
 }
 
 #[tauri::command]
-async fn toggle_kill_switch_cmd(
-    blocked: bool,
-    reason: String,
-    admin_key: String,
-) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
-    kill_switch_manager::toggle_kill_switch(blocked, reason).await
+async fn require_github_admin() -> Result<(), String> {
+    match github_auth::check_admin_status().await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("Operation requires GitHub admin login".to_string()),
+        Err(e) => Err(format!("Failed to verify GitHub admin status: {}", e)),
+    }
 }
 
 #[tauri::command]
-async fn schedule_kill_switch(
-    until: String,
-    reason: String,
-    admin_key: String,
-) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
+async fn toggle_kill_switch(enabled: bool, reason: String) -> Result<String, String> {
+    require_github_admin().await?;
+    kill_switch_manager::toggle_kill_switch(enabled, reason).await
+}
+
+#[tauri::command]
+async fn schedule_kill_switch(scheduled_for: String, reason: String) -> Result<String, String> {
+    require_github_admin().await?;
+
+    let until = match chrono::DateTime::parse_from_rfc3339(&scheduled_for) {
+        Ok(dt) => dt.to_rfc3339(),
+        Err(_) => {
+            let naive = chrono::NaiveDateTime::parse_from_str(&scheduled_for, "%Y-%m-%dT%H:%M")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(&scheduled_for, "%Y-%m-%dT%H:%M:%S"))
+                .map_err(|e| format!("Invalid scheduled date format: {}", e))?;
+
+            let local_dt = chrono::Local
+                .from_local_datetime(&naive)
+                .single()
+                .ok_or("Invalid local scheduled datetime")?;
+
+            local_dt.with_timezone(&chrono::Utc).to_rfc3339()
+        }
+    };
+
     kill_switch_manager::schedule_block(until, reason).await
 }
 
 #[tauri::command]
-async fn add_machine_to_whitelist(
-    machine_id: String,
-    admin_key: String,
-) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
-    kill_switch_manager::add_to_whitelist(machine_id).await
+async fn add_to_whitelist(item: String) -> Result<String, String> {
+    require_github_admin().await?;
+    kill_switch_manager::add_to_whitelist(item).await
 }
 
 #[tauri::command]
-async fn remove_machine_from_whitelist(
-    machine_id: String,
-    admin_key: String,
-) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
-    kill_switch_manager::remove_from_whitelist(machine_id).await
+async fn remove_from_whitelist(item: String) -> Result<String, String> {
+    require_github_admin().await?;
+    kill_switch_manager::remove_from_whitelist(item).await
 }
 
 #[tauri::command]
@@ -237,24 +366,37 @@ fn get_current_machine_id() -> Result<String, String> {
 async fn set_kill_switch_message(
     message: String,
     redirect_url: Option<String>,
-    admin_key: String,
 ) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
+    require_github_admin().await?;
     kill_switch_manager::set_custom_message(message, redirect_url).await
 }
 
 #[tauri::command]
-fn create_kill_switch_override(
-    allow: bool,
-    admin_key: String,
-) -> Result<String, String> {
-    admin_key::verify_admin_key(&admin_key)?;
+async fn create_kill_switch_override(allow: bool) -> Result<String, String> {
+    require_github_admin().await?;
     kill_switch_manager::create_local_override(allow)
 }
 
 #[tauri::command]
 async fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
     let res = git_manager::sync_scripts(&state.scripts_dir)?;
+
+    let encrypt_enabled = env::var("SR_ENCRYPT_OFFICIAL_LOCAL")
+        .map(|v| v != "0")
+        .unwrap_or(true);
+
+    if encrypt_enabled {
+        match script_encryption::encrypt_official_scripts(&state.scripts_dir) {
+            Ok(count) if count > 0 => {
+                log::info!("Encrypted {} official scripts for local protection", count)
+            }
+            Ok(_) => {}
+            Err(e) => log::warn!("Failed to encrypt official scripts locally: {}", e),
+        }
+    } else {
+        log::info!("Local official script encryption disabled by SR_ENCRYPT_OFFICIAL_LOCAL");
+    }
+
     dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec)
         .await?;
     Ok(res)
@@ -268,7 +410,7 @@ async fn run_script(
 ) -> Result<String, String> {
     let start_time = chrono::Utc::now();
     // Prefer user script; fall back to official if user copy not found
-    let user_dir = state.scripts_dir.join("scripts").join(&script_name);
+    let user_dir = script_manager::get_user_script_dir(&state.scripts_dir, &script_name);
     let official_dir_path = state.scripts_dir.join("official").join(&script_name);
 
     let script_dir = if user_dir.exists() {
@@ -286,7 +428,7 @@ async fn run_script(
     // Check for encrypted or plain script
     let main_enc = script_dir.join("main.py.enc");
     let main_py = script_dir.join("main.py");
-    
+
     let script_path = if main_enc.exists() {
         main_enc.clone()
     } else if main_py.exists() {
@@ -307,15 +449,16 @@ async fn run_script(
             std::fs::read_to_string(&main_py)
                 .map_err(|e| format!("Failed to read script: {}", e))?
         };
-        
+
         // Write temp file for analysis
-        let temp_analysis = std::env::temp_dir().join(format!("sr_analyze_{}.py", uuid::Uuid::new_v4()));
+        let temp_analysis =
+            std::env::temp_dir().join(format!("sr_analyze_{}.py", uuid::Uuid::new_v4()));
         std::fs::write(&temp_analysis, content)
             .map_err(|e| format!("Failed to write temp analysis file: {}", e))?;
-        
+
         let deps = dependency_manager::detect_dependencies(&temp_analysis).await?;
         dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
-        
+
         let _ = std::fs::remove_file(temp_analysis); // Cleanup
     }
 
@@ -349,7 +492,7 @@ async fn run_script(
         .next()
         .unwrap_or("uncategorized")
         .to_string();
-    
+
     let _ = analytics::track_execution(
         script_name.clone(),
         duration.num_milliseconds() as u64,
@@ -374,40 +517,63 @@ async fn encrypt_official_script(
 ) -> Result<String, String> {
     let official_dir = state.scripts_dir.join("official").join(&script_name);
     let main_py = official_dir.join("main.py");
-    
+
     if !main_py.exists() {
         return Err("Script not found".to_string());
     }
-    
+
     script_encryption::encrypt_script(&main_py)?;
     Ok(format!("Script {} encrypted successfully", script_name))
 }
 
 #[tauri::command]
 fn list_scripts(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    git_manager::list_available_scripts(&state.scripts_dir)
+    let scripts_dir = state.scripts_dir.to_string_lossy().to_string();
+    let mut scripts = Vec::new();
+
+    scripts.extend(
+        script_manager::get_local_scripts(scripts_dir.clone(), Some("official".to_string()))?
+            .into_iter()
+            .map(|s| s.name),
+    );
+
+    scripts.extend(
+        script_manager::get_local_scripts(scripts_dir, Some("scripts".to_string()))?
+            .into_iter()
+            .map(|s| s.name),
+    );
+
+    scripts.sort();
+    scripts.dedup();
+    Ok(scripts)
 }
 
 #[tauri::command]
-fn check_script_compatibility(script_name: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let user_dir = state.scripts_dir.join("scripts").join(&script_name);
+fn check_script_compatibility(
+    script_name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let user_dir = script_manager::get_user_script_dir(&state.scripts_dir, &script_name);
     let official_dir = state.scripts_dir.join("official").join(&script_name);
-    
-    let script_dir = if user_dir.exists() { user_dir } else { official_dir };
-    
+
+    let script_dir = if user_dir.exists() {
+        user_dir
+    } else {
+        official_dir
+    };
+
     // Check for encrypted or plain script
     let main_py = script_dir.join("main.py");
     let main_enc = script_dir.join("main.py.enc");
-    
+
     let content = if main_enc.exists() {
         script_encryption::decrypt_script(&main_enc)?
     } else if main_py.exists() {
-        std::fs::read_to_string(&main_py)
-            .map_err(|e| format!("Failed to read script: {}", e))?
+        std::fs::read_to_string(&main_py).map_err(|e| format!("Failed to read script: {}", e))?
     } else {
         return Err("Script not found".to_string());
     };
-    
+
     python_runner::check_platform_compatibility(&content)
 }
 
@@ -416,11 +582,8 @@ async fn get_script_logs(
     script_name: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let user_log = state
-        .scripts_dir
-        .join("scripts")
-        .join(&script_name)
-        .join("main.log");
+    let user_log =
+        script_manager::get_user_script_dir(&state.scripts_dir, &script_name).join("main.log");
 
     let official_log = state
         .scripts_dir
@@ -435,52 +598,6 @@ async fn get_script_logs(
     };
 
     std::fs::read_to_string(log_path).map_err(|e| format!("Failed to read logs: {}", e))
-}
-
-#[tauri::command]
-fn check_admin_key() -> Result<bool, String> {
-    // Legacy admin key check - kept for backward compatibility
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
-        candidates.push(PathBuf::from(custom));
-    }
-
-    if let Some(desktop) = dirs::desktop_dir() {
-        candidates.push(desktop.join("sr-admin.key"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(userprofile) = env::var("USERPROFILE") {
-            candidates.push(
-                PathBuf::from(userprofile)
-                    .join("Desktop")
-                    .join("sr-admin.key"),
-            );
-        }
-        candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
-        if let Ok(appdata) = env::var("APPDATA") {
-            candidates.push(
-                PathBuf::from(appdata)
-                    .join("script-runner")
-                    .join("sr-admin.key"),
-            );
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(home) = env::var("HOME") {
-            candidates.push(PathBuf::from(home).join("Desktop").join("sr-admin.key"));
-        }
-        candidates.push(PathBuf::from("/tmp/sr-admin.key"));
-    }
-
-    let is_valid = candidates.iter().any(|p| admin_key::validate_key_file(p));
-
-    log::info!("Legacy admin key check: {}", is_valid);
-    Ok(is_valid)
 }
 
 // GitHub Authentication Commands
@@ -502,15 +619,7 @@ fn get_github_user() -> Result<Option<github_auth::GitHubUser>, String> {
 
 #[tauri::command]
 async fn check_admin_status() -> Result<bool, String> {
-    // Check GitHub auth first (new method)
-    match github_auth::check_admin_status().await {
-        Ok(true) => return Ok(true),
-        Ok(false) => {}
-        Err(e) => log::warn!("GitHub admin check failed: {}", e),
-    }
-    
-    // Fallback to legacy admin key
-    check_admin_key()
+    github_auth::check_admin_status().await
 }
 
 #[tauri::command]
@@ -519,56 +628,8 @@ async fn refresh_github_admin_status() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_admin_key_info() -> Result<serde_json::Value, String> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Ok(custom) = env::var("SR_ADMIN_KEY_PATH") {
-        candidates.push(PathBuf::from(custom));
-    }
-
-    if let Some(desktop) = dirs::desktop_dir() {
-        candidates.push(desktop.join("sr-admin.key"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(userprofile) = env::var("USERPROFILE") {
-            candidates.push(
-                PathBuf::from(userprofile)
-                    .join("Desktop")
-                    .join("sr-admin.key"),
-            );
-        }
-        candidates.push(PathBuf::from("C:/Users/Public/Desktop/sr-admin.key"));
-        if let Ok(appdata) = env::var("APPDATA") {
-            candidates.push(
-                PathBuf::from(appdata)
-                    .join("script-runner")
-                    .join("sr-admin.key"),
-            );
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(home) = env::var("HOME") {
-            candidates.push(PathBuf::from(home).join("Desktop").join("sr-admin.key"));
-        }
-        candidates.push(PathBuf::from("/tmp/sr-admin.key"));
-    }
-
-    let info: Vec<serde_json::Value> = candidates
-        .iter()
-        .map(|p| {
-            serde_json::json!({
-                "path": p.to_string_lossy().to_string(),
-                "exists": p.exists(),
-                "valid": admin_key::validate_key_file(&p),
-            })
-        })
-        .collect();
-
-    Ok(serde_json::json!({ "candidates": info }))
+async fn check_github_admin_status() -> Result<bool, String> {
+    github_auth::check_admin_status().await
 }
 
 #[tauri::command]
@@ -593,18 +654,39 @@ fn get_settings() -> Result<settings::AppSettings, String> {
 }
 
 #[tauri::command]
+fn set_auto_update(enabled: bool) -> Result<bool, String> {
+    settings::set_auto_update(enabled)
+}
+
+#[tauri::command]
 fn get_scripts_dir(state: State<'_, AppState>) -> Result<String, String> {
     Ok(state.scripts_dir.to_string_lossy().to_string())
 }
 
 #[tauri::command]
+fn get_app_instance_id() -> Result<String, String> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to resolve current executable path: {}", e))?;
+    let normalized = exe_path.to_string_lossy().to_lowercase();
+
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in normalized.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+
+    Ok(format!("{:016x}", hash))
+}
+
+#[tauri::command]
 async fn check_for_updates() -> Result<bool, String> {
-    const CURRENT_VERSION: &str = "0.5.1";
-    
+    const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+    let latest_url = releases_latest_api_url();
+
     let client = reqwest::Client::new();
-    
+
     match client
-        .get("https://api.github.com/repos/YOUR_GITHUB_USERNAME/python_runner_github/releases/latest")
+        .get(&latest_url)
         .header("User-Agent", "ScriptRunner")
         .send()
         .await
@@ -620,7 +702,7 @@ async fn check_for_updates() -> Result<bool, String> {
                     if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
                         let latest = tag.trim_start_matches('v');
                         log::info!("Current version: {}, Latest version: {}", CURRENT_VERSION, latest);
-                        Ok(latest != CURRENT_VERSION && latest > CURRENT_VERSION)
+                        Ok(is_newer_version(latest, CURRENT_VERSION))
                     } else {
                         Ok(false)
                     }
@@ -640,10 +722,12 @@ async fn check_for_updates() -> Result<bool, String> {
 
 #[tauri::command]
 async fn get_download_url() -> Result<String, String> {
+    let latest_url = releases_latest_api_url();
+    let fallback_url = releases_page_url();
     let client = reqwest::Client::new();
-    
+
     match client
-        .get("https://api.github.com/repos/YOUR_GITHUB_USERNAME/python_runner_github/releases/latest")
+        .get(&latest_url)
         .header("User-Agent", "ScriptRunner")
         .send()
         .await
@@ -654,20 +738,51 @@ async fn get_download_url() -> Result<String, String> {
                     if let Some(url) = json.get("html_url").and_then(|v| v.as_str()) {
                         Ok(url.to_string())
                     } else {
-                        Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+                        Ok(fallback_url)
                     }
                 }
                 Err(e) => {
                     log::warn!("Failed to parse GitHub response: {}", e);
-                    Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+                    Ok(fallback_url)
                 }
             }
         }
         Err(e) => {
             log::warn!("Failed to fetch releases from GitHub: {}", e);
-            Ok("https://github.com/YOUR_GITHUB_USERNAME/python_runner_github/releases".to_string())
+            Ok(fallback_url)
         }
     }
+}
+
+#[tauri::command]
+async fn check_for_updates_with_details(
+    app: tauri::AppHandle,
+) -> Result<Option<AvailableUpdateInfo>, String> {
+    let Some(update) = check_runtime_update(app).await? else {
+        return Ok(None);
+    };
+
+    Ok(Some(AvailableUpdateInfo {
+        version: update.version,
+        current_version: update.current_version,
+        notes: update.body,
+        pub_date: update.date.map(|date| date.to_string()),
+        download_url: update.download_url.to_string(),
+    }))
+}
+
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<bool, String> {
+    let Some(update) = check_runtime_update(app).await? else {
+        return Ok(false);
+    };
+
+    update
+        .download_and_install(|_chunk_length, _content_length| {}, || {})
+        .await
+        .map_err(|e| format!("Failed to download and install update: {}", e))?;
+
+    Ok(true)
 }
 
 // Analytics commands
@@ -689,15 +804,17 @@ fn clear_analytics_data() -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             send_desktop_notification,
             check_kill_switch,
             check_kill_switch_status,
             get_kill_switch_status,
-            toggle_kill_switch_cmd,
+            toggle_kill_switch,
             schedule_kill_switch,
-            add_machine_to_whitelist,
-            remove_machine_from_whitelist,
+            add_to_whitelist,
+            remove_from_whitelist,
             get_current_machine_id,
             set_kill_switch_message,
             create_kill_switch_override,
@@ -711,22 +828,33 @@ fn main() {
             script_manager::add_official_script_from_path,
             script_manager::delete_script,
             script_manager::get_local_scripts,
+            script_manager::list_official_scripts,
+            script_manager::get_all_scripts_info,
+            script_manager::get_script_source,
+            script_manager::replace_official_script_content,
+            script_manager::update_official_script_full,
+            script_manager::bulk_delete_official_scripts,
+            script_manager::bulk_encrypt_official_scripts,
+            script_manager::bulk_update_official_metadata,
             update_all_dependencies,
-            check_admin_key,
             check_admin_status,
-            get_admin_key_info,
             github_login,
             github_logout,
             get_github_user,
             refresh_github_admin_status,
+            check_github_admin_status,
             get_run_history,
             export_history_as_csv,
             toggle_dark_mode,
             get_settings,
+            set_auto_update,
             get_scripts_dir,
+            get_app_instance_id,
             encrypt_official_script,
             check_for_updates,
             get_download_url,
+            check_for_updates_with_details,
+            install_update,
             get_analytics_data,
             export_analytics,
             clear_analytics_data,

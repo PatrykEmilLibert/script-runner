@@ -186,17 +186,13 @@ Each standalone executable includes:
 
 **User doesn't need anything!**
 
-## 🎓 Example Scripts Included
+## 🔄 Scripts Source Model
 
-1. **github_stats.py** - Fetches GitHub user data
-   - Shows external API usage
-   - Auto-installs `requests` dependency
-
-2. **data_processor.py** - Processes JSON/CSV
-   - Shows data transformation
-   - Uses only stdlib (no deps)
-
-Both run out of the box!
+- Application does **not** bundle local example scripts.
+- Scripts are synchronized from external repository:
+  - `https://github.com/PatrykEmilLibert/script-runner-scripts.git`
+- On first launch app clones remote repo to user data directory.
+- On next launches app syncs updates from remote.
 
 ## 🆘 Troubleshooting
 

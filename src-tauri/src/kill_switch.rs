@@ -1,25 +1,25 @@
-use reqwest;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 const CACHE_FILE: &str = "kill_switch_cache.json";
 const CACHE_DURATION_HOURS: i64 = 24;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct KillSwitchConfig {
     pub blocked: bool,
     pub reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_until: Option<String>, // ISO 8601 timestamp
     #[serde(default)]
-    pub whitelist: Vec<String>,        // machine IDs
+    pub whitelist: Vec<String>, // machine IDs
     #[serde(default)]
-    pub message: String,               // custom message
+    pub message: String, // custom message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redirect_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cached_at: Option<String>,     // internal use for cache validation
+    pub cached_at: Option<String>, // internal use for cache validation
 }
 
 impl Default for KillSwitchConfig {
@@ -36,6 +36,22 @@ impl Default for KillSwitchConfig {
     }
 }
 
+fn resolve_github_token() -> Option<String> {
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        if !token.trim().is_empty() {
+            return Some(token);
+        }
+    }
+
+    if let Ok(Some(session)) = crate::github_auth::get_current_session() {
+        if !session.token.trim().is_empty() {
+            return Some(session.token);
+        }
+    }
+
+    None
+}
+
 /// Legacy function for backward compatibility
 pub async fn check_remote_status() -> Result<bool, String> {
     match check_remote_status_advanced().await {
@@ -50,16 +66,31 @@ pub async fn check_remote_status() -> Result<bool, String> {
 /// Fetches full kill switch configuration from GitHub
 pub async fn check_remote_status_advanced() -> Result<KillSwitchConfig, String> {
     let client = reqwest::Client::new();
-    
-    match client
+
+    let mut request = client
         .get("https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json")
         .header("Accept", "application/vnd.github.v3.raw")
         .header("User-Agent", "ScriptRunner-App")
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await
-    {
+        .timeout(std::time::Duration::from_secs(5));
+
+    if let Some(token) = resolve_github_token() {
+        request = request.header("Authorization", format!("Bearer {}", token));
+    }
+
+    match request.send().await {
         Ok(response) => {
+            if !response.status().is_success() {
+                log::warn!(
+                    "Kill switch fetch returned status {}",
+                    response.status()
+                );
+                if let Some(cached) = get_cached_status() {
+                    log::info!("Using cached kill switch status after API error");
+                    return Ok(cached);
+                }
+                return Ok(KillSwitchConfig::default());
+            }
+
             match response.text().await {
                 Ok(text) => {
                     match serde_json::from_str::<KillSwitchConfig>(&text) {
@@ -128,7 +159,11 @@ pub fn should_block(config: &KillSwitchConfig) -> bool {
         match chrono::DateTime::parse_from_rfc3339(until) {
             Ok(until_time) => {
                 let now = chrono::Utc::now();
-                if now.signed_duration_since(until_time.with_timezone(&chrono::Utc)).num_seconds() > 0 {
+                if now
+                    .signed_duration_since(until_time.with_timezone(&chrono::Utc))
+                    .num_seconds()
+                    > 0
+                {
                     log::info!("Block time expired, allowing app to run");
                     return false;
                 }
@@ -162,7 +197,11 @@ pub fn get_machine_id() -> String {
         "{}-{}-{}",
         hostname,
         whoami::username(),
-        uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("unknown")
+        uuid::Uuid::new_v4()
+            .to_string()
+            .split('-')
+            .next()
+            .unwrap_or("unknown")
     );
 
     // Save for future use
@@ -183,8 +222,7 @@ pub fn cache_kill_switch_status(config: &KillSwitchConfig) -> Result<(), String>
     let json = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&cache_file, json)
-        .map_err(|e| format!("Failed to write cache file: {}", e))?;
+    fs::write(&cache_file, json).map_err(|e| format!("Failed to write cache file: {}", e))?;
 
     log::info!("Kill switch status cached successfully");
     Ok(())
@@ -207,10 +245,14 @@ pub fn get_cached_status() -> Option<KillSwitchConfig> {
                     if let Some(cached_at) = &config.cached_at {
                         if let Ok(cached_time) = chrono::DateTime::parse_from_rfc3339(cached_at) {
                             let now = chrono::Utc::now();
-                            let duration = now.signed_duration_since(cached_time.with_timezone(&chrono::Utc));
-                            
+                            let duration =
+                                now.signed_duration_since(cached_time.with_timezone(&chrono::Utc));
+
                             if duration.num_hours() < CACHE_DURATION_HOURS {
-                                log::info!("Using valid cached kill switch status (age: {} hours)", duration.num_hours());
+                                log::info!(
+                                    "Using valid cached kill switch status (age: {} hours)",
+                                    duration.num_hours()
+                                );
                                 return Some(config);
                             } else {
                                 log::warn!("Cache expired (age: {} hours)", duration.num_hours());

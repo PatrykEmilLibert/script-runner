@@ -81,7 +81,29 @@ Dla automatycznego budowania i releasów:
 
 ```
 GITHUB_TOKEN (automatyczny - już istnieje)
+TAURI_SIGNING_PRIVATE_KEY
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD (opcjonalny, jeśli klucz ma hasło)
+TAURI_UPDATER_PUBLIC_KEY
 ```
+
+### Jak wygenerować klucze updatera Tauri
+
+Uruchom lokalnie (jednorazowo):
+
+```bash
+cd P:\python_runner_github\script-runner
+npm install
+npm run tauri signer generate -- -w ~/.tauri/script-runner.key
+```
+
+Wynik:
+- plik prywatny: `~/.tauri/script-runner.key`
+- klucz publiczny (wypisany w terminalu)
+
+Do GitHub Secrets wstaw:
+- `TAURI_SIGNING_PRIVATE_KEY` = zawartość pliku prywatnego `.key`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = hasło (jeśli ustawiłeś)
+- `TAURI_UPDATER_PUBLIC_KEY` = pełna zawartość public key (PEM)
 
 Dla macOS codesigning (opcjonalne):
 ```
@@ -90,6 +112,7 @@ APPLE_CERTIFICATE_PASSWORD
 APPLE_SIGNING_IDENTITY
 APPLE_ID
 APPLE_PASSWORD
+APPLE_TEAM_ID
 ```
 
 ## Krok 6: Stwórz Scripts Repository
@@ -104,8 +127,10 @@ cd python-scripts
 git init
 echo "# Python Scripts Repository" > README.md
 
-# Dodaj example skrypty
-cp ../script-runner/examples/*.py .
+# Dodaj pierwszy przykładowy skrypt bezpośrednio w tym repo
+cat > hello_world.py << 'PY'
+print("Hello from external scripts repository")
+PY
 
 git add .
 git commit -m "Initial scripts"
@@ -122,6 +147,11 @@ git push -u origin main
 ```bash
 cd P:\python_runner_github\script-runner
 
+# Przed tagiem upewnij się, że wersja jest spójna:
+# - src-tauri/Cargo.toml
+# - src-tauri/tauri.conf.json
+# - src-tauri/tauri.release.conf.json
+
 git tag -a v0.1.0 -m "First release - ScriptRunner v0.1.0"
 git push origin v0.1.0
 ```
@@ -130,7 +160,9 @@ git push origin v0.1.0
 
 - Zbuduje Windows .exe
 - Zbuduje macOS .dmg
-- Stworzy GitHub Release z instalatorami
+- Podpisze artefakty updatera (`.sig`)
+- Wygeneruje `latest.json` dla in-app update
+- Stworzy opublikowany GitHub Release (nie draft)
 
 ## Krok 8: Zabezpieczenia
 

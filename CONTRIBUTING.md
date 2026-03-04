@@ -33,7 +33,6 @@ npm run tauri dev
 src/                 - React components & UI
 src-tauri/           - Rust backend
 .github/workflows/   - CI/CD automation
-examples/            - Example Python scripts
 ```
 
 ### Code Style

@@ -22,6 +22,7 @@ import {
   ActionIcon,
   Tooltip,
   Code,
+  Checkbox,
 } from '@mantine/core';
 import {
   BarChart3,
@@ -44,7 +45,6 @@ import {
   Save,
 } from 'lucide-react';
 import { AdminDropzone } from './AdminDropzone';
-import AdminKeyDiagnostics from './AdminKeyDiagnostics';
 import { useNotifications } from '../hooks/useNotifications';
 
 interface AdminPanelProps {
@@ -56,15 +56,21 @@ interface AdminPanelProps {
 
 interface ScriptInfo {
   name: string;
+  subdir: 'official' | 'scripts';
   path: string;
   size: number;
   modified: string;
+  description: string;
+  author: string;
+  version: string;
+  encrypted: boolean;
 }
 
 interface KillSwitchStatus {
   blocked: boolean;
   reason?: string;
   scheduledFor?: string;
+  blocked_until?: string;
   whitelist: string[];
 }
 
@@ -75,6 +81,17 @@ interface AppStats {
   activeSessions: number;
   lastSync: string;
   appStatus: 'active' | 'blocked';
+}
+
+interface AppSettings {
+  dark_mode: boolean;
+  auto_update_enabled: boolean;
+}
+
+interface BulkScriptOperationResult {
+  requested: number;
+  processed: number;
+  skipped: string[];
 }
 
 export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefreshScripts }: AdminPanelProps) {
@@ -95,6 +112,33 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
   // Script Management
   const [scripts, setScripts] = useState<ScriptInfo[]>([]);
   const [showUploader, setShowUploader] = useState(false);
+  const [scriptPreview, setScriptPreview] = useState({
+    open: false,
+    title: '',
+    content: '',
+    subdir: 'official' as 'official' | 'scripts',
+  });
+  const [replaceModal, setReplaceModal] = useState({
+    open: false,
+    scriptName: '',
+    content: '',
+  });
+  const [editModal, setEditModal] = useState({
+    open: false,
+    originalName: '',
+    name: '',
+    description: '',
+    author: '',
+    version: '',
+    content: '',
+  });
+  const [selectedOfficialScripts, setSelectedOfficialScripts] = useState<string[]>([]);
+  const [bulkMetadataModal, setBulkMetadataModal] = useState({
+    open: false,
+    author: '',
+    version: '',
+    descriptionPrefix: '',
+  });
   
   // Kill Switch
   const [killSwitchEnabled, setKillSwitchEnabled] = useState(false);
@@ -116,26 +160,40 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
     loadStats();
     loadScripts();
     loadKillSwitchStatus();
+    loadAppSettings();
   }, []);
+
+  useEffect(() => {
+    const officialNames = new Set(
+      scripts.filter((script) => script.subdir === 'official').map((script) => script.name)
+    );
+
+    setSelectedOfficialScripts((prev) => {
+      const filtered = prev.filter((name) => officialNames.has(name));
+      if (filtered.length === prev.length && filtered.every((name, index) => name === prev[index])) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [scripts]);
 
   // ==================== DATA LOADING ====================
   
   const loadStats = async () => {
     try {
-      const [official, user] = await Promise.all([
-        invoke<string[]>('list_official_scripts', { scriptsDir }),
-        invoke<string[]>('list_scripts', { scriptsDir }),
-      ]);
-      
-      const lastSyncTime = await invoke<string>('get_last_sync_time').catch(() => 'Never');
-      const appBlocked = await invoke<boolean>('check_kill_switch_status').catch(() => false);
+      const allScripts = await invoke<ScriptInfo[]>('get_all_scripts_info', { scriptsDir });
+      const official = allScripts.filter((s) => s.subdir === 'official');
+      const user = allScripts.filter((s) => s.subdir === 'scripts');
+
+      const killSwitch = await invoke<{ blocked?: boolean }>('check_kill_switch_status').catch(() => ({ blocked: false }));
+      const appBlocked = killSwitch?.blocked === true;
       
       setStats({
         totalScripts: official.length + user.length,
         officialScripts: official.length,
         userScripts: user.length,
         activeSessions: 1, // Current session
-        lastSync: lastSyncTime,
+        lastSync: new Date().toLocaleString(),
         appStatus: appBlocked ? 'blocked' : 'active',
       });
     } catch (error) {
@@ -151,7 +209,19 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
       console.error('Failed to load scripts:', error);
       // Fallback to basic list
       const basic = await invoke<string[]>('list_official_scripts', { scriptsDir });
-      setScripts(basic.map(name => ({ name, path: name, size: 0, modified: 'Unknown' })));
+      setScripts(
+        basic.map((name) => ({
+          name,
+          subdir: 'official' as const,
+          path: `official/${name}`,
+          size: 0,
+          modified: 'Unknown',
+          description: '',
+          author: '',
+          version: '1.0.0',
+          encrypted: false,
+        }))
+      );
     }
   };
 
@@ -160,10 +230,19 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
       const status = await invoke<KillSwitchStatus>('get_kill_switch_status');
       setKillSwitchEnabled(status.blocked);
       setKillSwitchReason(status.reason || '');
-      setScheduledDate(status.scheduledFor || '');
+      setScheduledDate(status.blocked_until || status.scheduledFor || '');
       setWhitelist(status.whitelist || []);
     } catch (error) {
       console.error('Failed to load kill switch status:', error);
+    }
+  };
+
+  const loadAppSettings = async () => {
+    try {
+      const settings = await invoke<AppSettings>('get_settings');
+      setAutoUpdateEnabled(settings.auto_update_enabled ?? true);
+    } catch (error) {
+      console.error('Failed to load app settings:', error);
     }
   };
 
@@ -180,9 +259,10 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
   const confirmDeleteScript = async () => {
     try {
       setLoading(true);
-      await invoke('delete_official_script', {
+      await invoke('delete_script', {
         scriptName: confirmModal.data,
         scriptsDir,
+        subdir: 'official',
       });
       showSuccess('Script Deleted', `Script "${confirmModal.data}" deleted successfully`);
       await loadScripts();
@@ -199,11 +279,288 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
   const handleEncryptScript = async (scriptName: string) => {
     try {
       setLoading(true);
-      await invoke('encrypt_script', { scriptName, scriptsDir });
+      await invoke('encrypt_official_script', { scriptName });
       showSuccess('Script Encrypted', `Script "${scriptName}" encrypted successfully`);
       await loadScripts();
     } catch (error) {
       showError('Encryption Failed', `Failed to encrypt script: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviewScript = async (scriptName: string, subdir: 'official' | 'scripts') => {
+    try {
+      setLoading(true);
+      const content = await invoke<string>('get_script_source', { scriptName, scriptsDir, subdir });
+      setScriptPreview({
+        open: true,
+        title: scriptName,
+        content,
+        subdir,
+      });
+    } catch (error) {
+      showError('Preview Failed', `Failed to load script preview: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openReplaceModal = async (scriptName: string) => {
+    try {
+      setLoading(true);
+      const content = await invoke<string>('get_script_source', {
+        scriptName,
+        scriptsDir,
+        subdir: 'official',
+      });
+      setReplaceModal({
+        open: true,
+        scriptName,
+        content,
+      });
+    } catch (error) {
+      showError('Load Failed', `Failed to load script content: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmReplaceScript = async () => {
+    if (!replaceModal.scriptName.trim()) return;
+
+    try {
+      setLoading(true);
+      await invoke('replace_official_script_content', {
+        scriptName: replaceModal.scriptName,
+        scriptContent: replaceModal.content,
+        scriptsDir,
+      });
+      showSuccess('Script Updated', `Code replaced for "${replaceModal.scriptName}"`);
+      setReplaceModal({ open: false, scriptName: '', content: '' });
+      await loadScripts();
+      await loadStats();
+      if (onRefreshScripts) onRefreshScripts();
+    } catch (error) {
+      showError('Replace Failed', `Failed to replace script code: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEditModal = async (script: ScriptInfo) => {
+    try {
+      setLoading(true);
+      const content = await invoke<string>('get_script_source', {
+        scriptName: script.name,
+        scriptsDir,
+        subdir: 'official',
+      });
+      setEditModal({
+        open: true,
+        originalName: script.name,
+        name: script.name,
+        description: script.description || '',
+        author: script.author || '',
+        version: script.version || '1.0.0',
+        content,
+      });
+    } catch (error) {
+      showError('Load Failed', `Failed to load script for editing: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmFullEditScript = async () => {
+    if (!editModal.name.trim()) {
+      showError('Validation Error', 'Script name cannot be empty');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await invoke('update_official_script_full', {
+        currentName: editModal.originalName,
+        newName: editModal.name,
+        scriptContent: editModal.content,
+        description: editModal.description,
+        author: editModal.author,
+        version: editModal.version,
+        scriptsDir,
+      });
+      showSuccess('Script Saved', `Official script "${editModal.name}" updated`);
+      setEditModal({
+        open: false,
+        originalName: '',
+        name: '',
+        description: '',
+        author: '',
+        version: '',
+        content: '',
+      });
+      await loadScripts();
+      await loadStats();
+      if (onRefreshScripts) onRefreshScripts();
+    } catch (error) {
+      showError('Save Failed', `Failed to save script: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleOfficialScriptSelection = (scriptName: string, selected: boolean) => {
+    setSelectedOfficialScripts((prev) => {
+      if (selected) {
+        if (prev.includes(scriptName)) {
+          return prev;
+        }
+        return [...prev, scriptName];
+      }
+      return prev.filter((name) => name !== scriptName);
+    });
+  };
+
+  const selectAllOfficialScripts = () => {
+    const officialNames = scripts
+      .filter((script) => script.subdir === 'official')
+      .map((script) => script.name);
+    setSelectedOfficialScripts(officialNames);
+  };
+
+  const selectOnlyUnencryptedOfficialScripts = () => {
+    const unencrypted = scripts
+      .filter((script) => script.subdir === 'official' && !script.encrypted)
+      .map((script) => script.name);
+    setSelectedOfficialScripts(unencrypted);
+  };
+
+  const clearOfficialSelection = () => {
+    setSelectedOfficialScripts([]);
+  };
+
+  const handleBulkEncryptScripts = async () => {
+    if (selectedOfficialScripts.length === 0) {
+      showError('No Selection', 'Select at least one official script first');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await invoke<BulkScriptOperationResult>('bulk_encrypt_official_scripts', {
+        scriptNames: selectedOfficialScripts,
+        scriptsDir,
+      });
+
+      const suffix = result.skipped.length > 0 ? `, skipped ${result.skipped.length}` : '';
+      showSuccess(
+        'Bulk Encryption Complete',
+        `Encrypted ${result.processed}/${result.requested} official scripts${suffix}`
+      );
+      await loadScripts();
+    } catch (error) {
+      showError('Bulk Encryption Failed', `Failed to encrypt selected scripts: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteScripts = () => {
+    if (selectedOfficialScripts.length === 0) {
+      showError('No Selection', 'Select at least one official script first');
+      return;
+    }
+
+    setConfirmModal({
+      open: true,
+      action: 'bulk_delete_scripts',
+      data: [...selectedOfficialScripts],
+    });
+  };
+
+  const confirmBulkDeleteScripts = async () => {
+    const selectedNames = Array.isArray(confirmModal.data) ? confirmModal.data : [];
+    if (selectedNames.length === 0) {
+      setConfirmModal({ open: false, action: '', data: null });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await invoke<BulkScriptOperationResult>('bulk_delete_official_scripts', {
+        scriptNames: selectedNames,
+        scriptsDir,
+      });
+
+      const suffix = result.skipped.length > 0 ? `, skipped ${result.skipped.length}` : '';
+      showSuccess(
+        'Bulk Delete Complete',
+        `Deleted ${result.processed}/${result.requested} official scripts${suffix}`
+      );
+
+      setSelectedOfficialScripts((prev) => prev.filter((name) => !selectedNames.includes(name)));
+      await loadScripts();
+      await loadStats();
+      if (onRefreshScripts) onRefreshScripts();
+    } catch (error) {
+      showError('Bulk Delete Failed', `Failed to delete selected scripts: ${error}`);
+    } finally {
+      setLoading(false);
+      setConfirmModal({ open: false, action: '', data: null });
+    }
+  };
+
+  const openBulkMetadataModal = () => {
+    if (selectedOfficialScripts.length === 0) {
+      showError('No Selection', 'Select at least one official script first');
+      return;
+    }
+
+    setBulkMetadataModal({
+      open: true,
+      author: '',
+      version: '',
+      descriptionPrefix: '',
+    });
+  };
+
+  const confirmBulkMetadataUpdate = async () => {
+    const author = bulkMetadataModal.author.trim();
+    const version = bulkMetadataModal.version.trim();
+    const descriptionPrefix = bulkMetadataModal.descriptionPrefix.trim();
+
+    if (!author && !version && !descriptionPrefix) {
+      showError('Validation Error', 'Provide at least one metadata field to update');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await invoke<BulkScriptOperationResult>('bulk_update_official_metadata', {
+        scriptNames: selectedOfficialScripts,
+        scriptsDir,
+        author: author || null,
+        version: version || null,
+        descriptionPrefix: descriptionPrefix || null,
+      });
+
+      const suffix = result.skipped.length > 0 ? `, skipped ${result.skipped.length}` : '';
+      showSuccess(
+        'Bulk Metadata Updated',
+        `Updated ${result.processed}/${result.requested} official scripts${suffix}`
+      );
+
+      setBulkMetadataModal({
+        open: false,
+        author: '',
+        version: '',
+        descriptionPrefix: '',
+      });
+      await loadScripts();
+      await loadStats();
+      if (onRefreshScripts) onRefreshScripts();
+    } catch (error) {
+      showError('Bulk Update Failed', `Failed to update metadata: ${error}`);
     } finally {
       setLoading(false);
     }
@@ -289,7 +646,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
   const handleSyncGitHub = async () => {
     try {
       setLoading(true);
-      await invoke('sync_github_scripts');
+      await invoke('sync_scripts');
       showSuccess('Sync Complete', 'GitHub sync completed successfully');
       await loadScripts();
       await loadStats();
@@ -337,6 +694,10 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
       </Text>
     </Card>
   );
+
+  const officialScripts = scripts.filter((script) => script.subdir === 'official');
+  const userScripts = scripts.filter((script) => script.subdir === 'scripts');
+  const selectedOfficialSet = new Set(selectedOfficialScripts);
 
   return (
     <Stack gap="lg" p="md">
@@ -430,7 +791,6 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
               </Group>
             </Card>
 
-            <AdminKeyDiagnostics />
           </Stack>
         </Tabs.Panel>
 
@@ -448,6 +808,11 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
               </Button>
             </Group>
 
+            <Alert color="blue" variant="light">
+              This view shows <Code>official/</Code> scripts and your own namespace in <Code>scripts/</Code>.
+              User scripts are pushed to GitHub, but the app only exposes your own user scripts on this installation/account.
+            </Alert>
+
             {showUploader && (
               <Card className="glass-pink" p="lg">
                 <AdminDropzone
@@ -464,48 +829,228 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
 
             <Card className="glass-pink" p="lg">
               <Stack gap="md">
-                {scripts.length === 0 ? (
-                  <Text c="dimmed" ta="center" py="xl">
-                    No scripts found
+                <Group justify="space-between">
+                  <Title order={4}>Official Scripts</Title>
+                  <Badge color="pink" variant="light">
+                    {officialScripts.length}
+                  </Badge>
+                </Group>
+
+                <Card withBorder p="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>Bulk Actions</Text>
+                      <Badge
+                        color={selectedOfficialScripts.length > 0 ? 'pink' : 'gray'}
+                        variant="light"
+                      >
+                        {selectedOfficialScripts.length} selected
+                      </Badge>
+                    </Group>
+
+                    <Group>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={selectAllOfficialScripts}
+                        disabled={officialScripts.length === 0}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={selectOnlyUnencryptedOfficialScripts}
+                        disabled={officialScripts.length === 0}
+                      >
+                        Select Unencrypted
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        onClick={clearOfficialSelection}
+                        disabled={selectedOfficialScripts.length === 0}
+                      >
+                        Clear Selection
+                      </Button>
+                    </Group>
+
+                    <Group>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="violet"
+                        leftSection={<Lock size={14} />}
+                        onClick={handleBulkEncryptScripts}
+                        disabled={selectedOfficialScripts.length === 0}
+                        loading={loading}
+                      >
+                        Encrypt Selected
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="pink"
+                        leftSection={<Edit size={14} />}
+                        onClick={openBulkMetadataModal}
+                        disabled={selectedOfficialScripts.length === 0}
+                        loading={loading}
+                      >
+                        Edit Metadata
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red"
+                        leftSection={<Trash2 size={14} />}
+                        onClick={handleBulkDeleteScripts}
+                        disabled={selectedOfficialScripts.length === 0}
+                        loading={loading}
+                      >
+                        Delete Selected
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Card>
+
+                {officialScripts.length === 0 ? (
+                  <Text c="dimmed" ta="center" py="lg">
+                    No official scripts found
                   </Text>
                 ) : (
-                  scripts.map((script) => (
-                    <Card key={script.name} withBorder p="md">
-                      <Group justify="space-between">
-                        <Stack gap={4}>
-                          <Text fw={600}>{script.name}</Text>
-                          <Group gap="xs">
-                            <Badge size="sm" variant="light">
-                              {(script.size / 1024).toFixed(1)} KB
-                            </Badge>
-                            <Text size="xs" c="dimmed">
-                              Modified: {script.modified}
-                            </Text>
+                  officialScripts.map((script) => (
+                      <Card key={`official-${script.name}`} withBorder p="md">
+                        <Group justify="space-between" align="flex-start" wrap="nowrap">
+                          <Group gap="sm" align="flex-start" style={{ flex: 1 }}>
+                            <Checkbox
+                              checked={selectedOfficialSet.has(script.name)}
+                              onChange={(event) =>
+                                toggleOfficialScriptSelection(
+                                  script.name,
+                                  event.currentTarget.checked
+                                )
+                              }
+                              mt={4}
+                              aria-label={`Select script ${script.name}`}
+                            />
+                            <Stack gap={4} style={{ flex: 1 }}>
+                              <Group gap="xs">
+                                <Text fw={600}>{script.name}</Text>
+                                {script.encrypted && (
+                                  <Badge size="xs" color="violet" variant="light">Encrypted</Badge>
+                                )}
+                                <Badge size="xs" color="pink" variant="light">v{script.version || '1.0.0'}</Badge>
+                              </Group>
+                              <Text size="sm" c="dimmed">{script.description || 'No description'}</Text>
+                              <Group gap="xs">
+                                <Badge size="sm" variant="light">{(script.size / 1024).toFixed(1)} KB</Badge>
+                                <Text size="xs" c="dimmed">Author: {script.author || 'Unknown'}</Text>
+                                <Text size="xs" c="dimmed">Modified: {script.modified || 'Unknown'}</Text>
+                              </Group>
+                            </Stack>
                           </Group>
-                        </Stack>
-                        <Group gap="xs">
-                          <Tooltip label="Encrypt">
+
+                          <Group gap="xs">
+                            <Tooltip label="Preview script">
+                              <ActionIcon
+                                variant="light"
+                                color="gray"
+                                onClick={() => handlePreviewScript(script.name, 'official')}
+                              >
+                                <Eye size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+
+                            <Tooltip label="Replace code only (keep metadata)">
+                              <ActionIcon
+                                variant="light"
+                                color="blue"
+                                onClick={() => openReplaceModal(script.name)}
+                              >
+                                <RefreshCw size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+
+                            <Tooltip label="Edit all data + code">
+                              <ActionIcon
+                                variant="light"
+                                color="pink"
+                                onClick={() => openEditModal(script)}
+                              >
+                                <Edit size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+
+                            <Tooltip label="Encrypt">
+                              <ActionIcon
+                                variant="light"
+                                color="violet"
+                                onClick={() => handleEncryptScript(script.name)}
+                              >
+                                <Lock size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+
+                            <Tooltip label="Delete">
+                              <ActionIcon
+                                variant="light"
+                                color="red"
+                                onClick={() => handleDeleteScript(script.name)}
+                              >
+                                <Trash2 size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          </Group>
+                        </Group>
+                      </Card>
+                    ))
+                )}
+              </Stack>
+            </Card>
+
+            <Card className="glass-pink" p="lg">
+              <Stack gap="md">
+                <Group justify="space-between">
+                  <Title order={4}>User Scripts (from repository)</Title>
+                  <Badge color="grape" variant="light">
+                    {userScripts.length}
+                  </Badge>
+                </Group>
+
+                {userScripts.length === 0 ? (
+                  <Text c="dimmed" ta="center" py="lg">
+                    No user scripts found in repository
+                  </Text>
+                ) : (
+                  userScripts.map((script) => (
+                      <Card key={`user-${script.name}`} withBorder p="md">
+                        <Group justify="space-between" align="flex-start">
+                          <Stack gap={4} style={{ flex: 1 }}>
+                            <Group gap="xs">
+                              <Text fw={600}>{script.name}</Text>
+                              <Badge size="xs" color="grape" variant="light">User</Badge>
+                              <Badge size="xs" color="gray" variant="light">v{script.version || '1.0.0'}</Badge>
+                            </Group>
+                            <Text size="sm" c="dimmed">{script.description || 'No description'}</Text>
+                            <Group gap="xs">
+                              <Badge size="sm" variant="light">{(script.size / 1024).toFixed(1)} KB</Badge>
+                              <Text size="xs" c="dimmed">Author: {script.author || 'Unknown'}</Text>
+                              <Text size="xs" c="dimmed">Modified: {script.modified || 'Unknown'}</Text>
+                            </Group>
+                          </Stack>
+
+                          <Tooltip label="Preview script">
                             <ActionIcon
                               variant="light"
-                              color="blue"
-                              onClick={() => handleEncryptScript(script.name)}
+                              color="gray"
+                              onClick={() => handlePreviewScript(script.name, 'scripts')}
                             >
-                              <Lock size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                          <Tooltip label="Delete">
-                            <ActionIcon
-                              variant="light"
-                              color="red"
-                              onClick={() => handleDeleteScript(script.name)}
-                            >
-                              <Trash2 size={16} />
+                              <Eye size={16} />
                             </ActionIcon>
                           </Tooltip>
                         </Group>
-                      </Group>
-                    </Card>
-                  ))
+                      </Card>
+                    ))
                 )}
               </Stack>
             </Card>
@@ -726,6 +1271,204 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
         </Tabs.Panel>
       </Tabs>
 
+      <Modal
+        opened={scriptPreview.open}
+        onClose={() =>
+          setScriptPreview({ open: false, title: '', content: '', subdir: 'official' })
+        }
+        title={`Preview: ${scriptPreview.title} (${scriptPreview.subdir})`}
+        size="xl"
+        centered
+      >
+        <Stack gap="md">
+          <Code block>{scriptPreview.content || '# Empty script'}</Code>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={replaceModal.open}
+        onClose={() => setReplaceModal({ open: false, scriptName: '', content: '' })}
+        title={`Replace Code: ${replaceModal.scriptName}`}
+        size="xl"
+        centered
+      >
+        <Stack gap="md">
+          <Alert color="blue" variant="light">
+            This updates only script code and keeps existing metadata.
+          </Alert>
+          <Textarea
+            value={replaceModal.content}
+            onChange={(e) =>
+              setReplaceModal((prev) => ({
+                ...prev,
+                content: e.currentTarget.value,
+              }))
+            }
+            minRows={16}
+            autosize
+            label="main.py content"
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              onClick={() => setReplaceModal({ open: false, scriptName: '', content: '' })}
+            >
+              Cancel
+            </Button>
+            <Button className="btn-pink" leftSection={<Save size={16} />} loading={loading} onClick={confirmReplaceScript}>
+              Replace Code
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={editModal.open}
+        onClose={() =>
+          setEditModal({
+            open: false,
+            originalName: '',
+            name: '',
+            description: '',
+            author: '',
+            version: '',
+            content: '',
+          })
+        }
+        title={`Edit Script: ${editModal.originalName}`}
+        size="xl"
+        centered
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Script Name"
+            value={editModal.name}
+            onChange={(e) => setEditModal((prev) => ({ ...prev, name: e.currentTarget.value }))}
+          />
+          <TextInput
+            label="Description"
+            value={editModal.description}
+            onChange={(e) =>
+              setEditModal((prev) => ({ ...prev, description: e.currentTarget.value }))
+            }
+          />
+          <Group grow>
+            <TextInput
+              label="Author"
+              value={editModal.author}
+              onChange={(e) =>
+                setEditModal((prev) => ({ ...prev, author: e.currentTarget.value }))
+              }
+            />
+            <TextInput
+              label="Version"
+              value={editModal.version}
+              onChange={(e) =>
+                setEditModal((prev) => ({ ...prev, version: e.currentTarget.value }))
+              }
+            />
+          </Group>
+          <Textarea
+            label="main.py content"
+            value={editModal.content}
+            onChange={(e) => setEditModal((prev) => ({ ...prev, content: e.currentTarget.value }))}
+            minRows={16}
+            autosize
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              onClick={() =>
+                setEditModal({
+                  open: false,
+                  originalName: '',
+                  name: '',
+                  description: '',
+                  author: '',
+                  version: '',
+                  content: '',
+                })
+              }
+            >
+              Cancel
+            </Button>
+            <Button className="btn-pink" leftSection={<Save size={16} />} loading={loading} onClick={confirmFullEditScript}>
+              Save All Changes
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={bulkMetadataModal.open}
+        onClose={() =>
+          setBulkMetadataModal({
+            open: false,
+            author: '',
+            version: '',
+            descriptionPrefix: '',
+          })
+        }
+        title={`Bulk Metadata Update (${selectedOfficialScripts.length} selected)`}
+        centered
+      >
+        <Stack gap="md">
+          <Alert color="blue" variant="light">
+            Fill only the fields you want to apply to all selected official scripts.
+          </Alert>
+          <TextInput
+            label="Author"
+            placeholder="Set author for all selected scripts"
+            value={bulkMetadataModal.author}
+            onChange={(e) =>
+              setBulkMetadataModal((prev) => ({ ...prev, author: e.currentTarget.value }))
+            }
+          />
+          <TextInput
+            label="Version"
+            placeholder="Set version for all selected scripts"
+            value={bulkMetadataModal.version}
+            onChange={(e) =>
+              setBulkMetadataModal((prev) => ({ ...prev, version: e.currentTarget.value }))
+            }
+          />
+          <TextInput
+            label="Description Prefix"
+            placeholder="Prefix added to beginning of each description"
+            value={bulkMetadataModal.descriptionPrefix}
+            onChange={(e) =>
+              setBulkMetadataModal((prev) => ({
+                ...prev,
+                descriptionPrefix: e.currentTarget.value,
+              }))
+            }
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              onClick={() =>
+                setBulkMetadataModal({
+                  open: false,
+                  author: '',
+                  version: '',
+                  descriptionPrefix: '',
+                })
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              className="btn-pink"
+              leftSection={<Save size={16} />}
+              loading={loading}
+              onClick={confirmBulkMetadataUpdate}
+            >
+              Apply to Selected
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* ==================== CONFIRMATION MODAL ==================== */}
       <Modal
         opened={confirmModal.open}
@@ -745,6 +1488,32 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
                 </Button>
                 <Button color="red" onClick={confirmDeleteScript} loading={loading}>
                   Delete
+                </Button>
+              </Group>
+            </>
+          )}
+
+          {confirmModal.action === 'bulk_delete_scripts' && (
+            <>
+              <Alert icon={<AlertTriangle size={16} />} color="red">
+                Are you sure you want to delete
+                {' '}
+                {Array.isArray(confirmModal.data) ? confirmModal.data.length : 0}
+                {' '}
+                selected official scripts? This action cannot be undone.
+              </Alert>
+              {Array.isArray(confirmModal.data) && confirmModal.data.length > 0 && (
+                <Code block>
+                  {confirmModal.data.slice(0, 10).join('\n')}
+                  {confirmModal.data.length > 10 ? '\n...' : ''}
+                </Code>
+              )}
+              <Group justify="flex-end">
+                <Button variant="light" onClick={() => setConfirmModal({ open: false, action: '', data: null })}>
+                  Cancel
+                </Button>
+                <Button color="red" onClick={confirmBulkDeleteScripts} loading={loading}>
+                  Delete Selected
                 </Button>
               </Group>
             </>

@@ -26,8 +26,8 @@ pub fn history_file() -> PathBuf {
 pub fn add_record(record: RunRecord) -> Result<(), String> {
     let path = history_file();
     let mut records: Vec<RunRecord> = if path.exists() {
-        let content = fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read history: {}", e))?;
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read history: {}", e))?;
         serde_json::from_str(&content).unwrap_or_default()
     } else {
         Vec::new()
@@ -53,19 +53,24 @@ pub fn get_records(limit: usize) -> Result<Vec<RunRecord>, String> {
         return Ok(Vec::new());
     }
 
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read history: {}", e))?;
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read history: {}", e))?;
     let records: Vec<RunRecord> = serde_json::from_str(&content).unwrap_or_default();
 
     Ok(records.into_iter().rev().take(limit).collect())
 }
 
 pub fn export_as_csv(records: &[RunRecord]) -> String {
-    let mut csv = String::from("Skrypt,Status,Czas rozpoczęcia,Czas zakończenia,Czas trwania (ms),Wyjście\n");
+    let mut csv =
+        String::from("Skrypt,Status,Czas rozpoczęcia,Czas zakończenia,Czas trwania (ms),Wyjście\n");
 
     for record in records {
         let output = record.output.replace("\"", "\"\"").replace("\n", " ");
-        let error = record.error.as_ref().map(|e| e.replace("\"", "\"\"")).unwrap_or_default();
+        let error = record
+            .error
+            .as_ref()
+            .map(|e| e.replace("\"", "\"\""))
+            .unwrap_or_default();
         let status_output = if record.status == "error" {
             format!("{} - {}", record.status, error)
         } else {

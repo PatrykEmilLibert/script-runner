@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { 
   AppShell, 
@@ -16,7 +17,8 @@ import {
   Box,
   Tooltip,
   Container,
-  Flex
+  Flex,
+  Drawer
 } from "@mantine/core";
 import { 
   LayoutDashboard as IconDashboard, 
@@ -29,7 +31,11 @@ import {
   Moon as IconMoon,
   Sun as IconSun,
   Command as IconCommand,
-  Sparkles as IconSparkles
+  Sparkles as IconSparkles,
+  Github as IconGithub,
+  Minus as IconWindowMinimize,
+  Square as IconWindowMaximize,
+  X as IconWindowClose
 } from "lucide-react";
 import Dashboard from "./components/Dashboard";
 import ScriptList from "./components/ScriptList";
@@ -82,10 +88,27 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    const saved = localStorage.getItem("favScripts");
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [favoritesStorageKey, setFavoritesStorageKey] = useState("favScripts");
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [showGitHubAuth, setShowGitHubAuth] = useState(false);
+  const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(favoritesStorageKey);
+    if (!saved) {
+      setFavorites([]);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved);
+      setFavorites(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.error("Failed to load favorites:", error);
+      setFavorites([]);
+    }
+  }, [favoritesStorageKey]);
 
   useEffect(() => {
     console.log("[APP] Render - activeTab:", activeTab, "isAdmin:", isAdmin);
@@ -95,6 +118,48 @@ export default function App() {
   useEffect(() => {
     const theme = localStorage.getItem('sr-theme');
     setDarkMode(theme === 'dark');
+  }, []);
+
+  // Hybrid titlebar: custom (frameless) on Windows, native overlay on macOS
+  useEffect(() => {
+    const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+    if (!isWindows) return;
+
+    const appWindow = getCurrentWindow();
+
+    appWindow
+      .setDecorations(false)
+      .then(() => setIsWindowsFrameless(true))
+      .catch((error) => {
+        setIsWindowsFrameless(false);
+        console.warn("Failed to disable window decorations on Windows:", error);
+      });
+
+    appWindow
+      .isMaximized()
+      .then(setIsWindowMaximized)
+      .catch(() => setIsWindowMaximized(false));
+
+    let unlistenResized: (() => void) | undefined;
+    appWindow
+      .onResized(async () => {
+        try {
+          const maximized = await appWindow.isMaximized();
+          setIsWindowMaximized(maximized);
+        } catch (error) {
+          console.warn("Failed to read window maximize state:", error);
+        }
+      })
+      .then((unlisten) => {
+        unlistenResized = unlisten;
+      })
+      .catch((error) => {
+        console.warn("Failed to subscribe to resize events:", error);
+      });
+
+    return () => {
+      unlistenResized?.();
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -159,14 +224,79 @@ export default function App() {
       const updated = isFav 
         ? [...prev, scriptName]
         : prev.filter((s) => s !== scriptName);
-      localStorage.setItem("favScripts", JSON.stringify(updated));
+      localStorage.setItem(favoritesStorageKey, JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const enforceKillSwitchGate = async () => {
+    try {
+      const blocked = await invoke<boolean>("check_kill_switch");
+      if (!blocked) {
+        setAppBlocked(false);
+        return;
+      }
+
+      const isGithubAdmin = await invoke<boolean>("check_github_admin_status").catch(() => false);
+      if (isGithubAdmin) {
+        setAppBlocked(false);
+        return;
+      }
+
+      const killSwitchConfig: any = await invoke("check_kill_switch_status").catch(() => null);
+      const reason =
+        killSwitchConfig?.message ||
+        killSwitchConfig?.reason ||
+        "Application access is currently restricted";
+
+      setBlockReason(reason);
+      setAppBlocked(true);
+    } catch (error) {
+      console.warn("Failed to enforce kill switch gate:", error);
+    }
   };
 
   const handleAuthChange = async (isAdminStatus: boolean) => {
     setIsAdmin(isAdminStatus);
     console.log("Admin status updated:", isAdminStatus);
+
+    if (!isAdminStatus) {
+      await enforceKillSwitchGate();
+    } else {
+      setAppBlocked(false);
+    }
+  };
+
+  const handleWindowMinimize = async () => {
+    try {
+      await getCurrentWindow().minimize();
+    } catch (error) {
+      console.error("Failed to minimize window:", error);
+    }
+  };
+
+  const handleWindowToggleMaximize = async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      const maximized = await appWindow.isMaximized();
+      if (maximized) {
+        await appWindow.unmaximize();
+        setIsWindowMaximized(false);
+      } else {
+        await appWindow.maximize();
+        setIsWindowMaximized(true);
+      }
+    } catch (error) {
+      console.error("Failed to toggle maximize window:", error);
+    }
+  };
+
+  const handleWindowClose = async () => {
+    try {
+      await getCurrentWindow().close();
+    } catch (error) {
+      console.error("Failed to close window:", error);
+    }
   };
 
   const runScriptDirectly = async (scriptName: string) => {
@@ -175,7 +305,6 @@ export default function App() {
       ...prev,
       [scriptName]: { output: "Starting script...\n", isRunning: true }
     }));
-    setActiveTab("output");
     setSelectedScript(scriptName);
 
     try {
@@ -213,23 +342,49 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    const initApp = async () => {
+  const initializeApp = async () => {
+    setIsLoading(true);
+    try {
+      let killSwitchBlocked = false;
+      let killSwitchConfig: any = null;
+
+      // Check kill switch first
       try {
-        // Check kill switch
+        killSwitchBlocked = await invoke<boolean>("check_kill_switch");
+        if (killSwitchBlocked) {
+          killSwitchConfig = await invoke("check_kill_switch_status").catch(() => null);
+        }
+      } catch (ksError) {
+        console.warn("Kill switch check failed:", ksError);
+      }
+
+      if (killSwitchBlocked) {
+        const reason =
+          killSwitchConfig?.message ||
+          killSwitchConfig?.reason ||
+          "Application access is currently restricted";
+        setBlockReason(reason);
+
+        let githubAdmin = false;
         try {
-          const killSwitchConfig: any = await invoke("check_kill_switch_status");
-          if (killSwitchConfig.blocked) {
-            setAppBlocked(true);
-            setBlockReason(killSwitchConfig.message || killSwitchConfig.reason || "Application access is currently restricted");
-            return;
-          }
-        } catch (ksError) {
-          console.warn("Kill switch check failed:", ksError);
-          // Continue if kill switch check fails
+          githubAdmin = await invoke<boolean>("check_github_admin_status");
+        } catch (adminError) {
+          console.error("Strict GitHub admin check error:", adminError);
+          githubAdmin = false;
         }
 
-        // Check admin status (GitHub auth or legacy admin key)
+        if (!githubAdmin) {
+          setIsAdmin(false);
+          setAppBlocked(true);
+          return;
+        }
+
+        setIsAdmin(true);
+        setAppBlocked(false);
+      } else {
+        setAppBlocked(false);
+
+        // Standard admin status check (GitHub auth)
         try {
           const admin: boolean = await invoke("check_admin_status");
           setIsAdmin(admin);
@@ -238,58 +393,77 @@ export default function App() {
           console.error("Admin status check error:", adminError);
           setIsAdmin(false);
         }
-
-        // Resolve scripts directory from backend
-        const dir: string = await invoke("get_scripts_dir");
-        setScriptsDir(dir);
-        setOfficialDir(dir);
-        console.log("Scripts directory:", dir);
-
-        // Sync scripts from GitHub (clone if missing)
-        try {
-          const syncResult: string = await invoke("sync_scripts");
-          console.log("Sync result:", syncResult);
-          
-          // Check for new scripts notification
-          if (syncResult.includes("|new_scripts:")) {
-            const parts = syncResult.split("|new_scripts:");
-            const newCount = parseInt(parts[1]);
-            if (newCount > 0) {
-              await sendNotification(
-                "New Scripts Available!",
-                `${newCount} new script${newCount > 1 ? 's' : ''} added to your library`,
-                'success',
-                { sound: true, desktop: true }
-              );
-            }
-          }
-        } catch (syncError) {
-          console.error("Sync error:", syncError);
-          // Don't fail completely - maybe scripts are already present
-          setErrorMessage(`Warning: Could not sync scripts from GitHub: ${syncError}`);
-        }
-
-        // List available scripts
-        const scriptList: string[] = await invoke("list_scripts");
-        setScripts(scriptList);
-        console.log("Found scripts:", scriptList);
-
-        // Load local scripts with the resolved path
-        await loadLocalScripts(dir);
-        await loadOfficialScripts(dir);
-      } catch (error) {
-        console.error("Initialization error:", error);
-        setErrorMessage(String(error));
-        // Check if it's a network error
-        if (error && typeof error === 'string' && (error.includes('internet') || error.includes('network') || error.includes('connection'))) {
-          setNetworkError(true);
-        }
-      } finally {
-        setIsLoading(false);
       }
-    };
 
-    initApp();
+      // Resolve scripts directory from backend
+      const dir: string = await invoke("get_scripts_dir");
+      setScriptsDir(dir);
+      setOfficialDir(dir);
+      console.log("Scripts directory:", dir);
+
+      // Resolve unique app instance id for per-install local storage
+      try {
+        const instanceId: string = await invoke("get_app_instance_id");
+        setFavoritesStorageKey(`favScripts:${instanceId}`);
+      } catch (instanceError) {
+        console.warn("Failed to resolve app instance id, using default favorites key:", instanceError);
+      }
+
+      // Sync scripts from GitHub (clone if missing)
+      try {
+        const syncResult: string = await invoke("sync_scripts");
+        console.log("Sync result:", syncResult);
+
+        // Check for new scripts notification
+        if (syncResult.includes("|new_scripts:")) {
+          const parts = syncResult.split("|new_scripts:");
+          const newCount = parseInt(parts[1]);
+          if (newCount > 0) {
+            await sendNotification(
+              "New Scripts Available!",
+              `${newCount} new script${newCount > 1 ? 's' : ''} added to your library`,
+              'success',
+              { sound: true, desktop: true }
+            );
+          }
+        }
+      } catch (syncError) {
+        console.error("Sync error:", syncError);
+        // Don't fail completely - maybe scripts are already present
+        setErrorMessage(`Warning: Could not sync scripts from GitHub: ${syncError}`);
+      }
+
+      // List available scripts
+      const scriptList: string[] = await invoke("list_scripts");
+      setScripts(scriptList);
+      console.log("Found scripts:", scriptList);
+
+      // Load local scripts with the resolved path
+      await loadLocalScripts(dir);
+      await loadOfficialScripts(dir);
+    } catch (error) {
+      console.error("Initialization error:", error);
+      setErrorMessage(String(error));
+      // Check if it's a network error
+      if (error && typeof error === 'string' && (error.includes('internet') || error.includes('network') || error.includes('connection'))) {
+        setNetworkError(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBlockedAuthChange = async (isAdminStatus: boolean) => {
+    await handleAuthChange(isAdminStatus);
+    if (isAdminStatus) {
+      setAppBlocked(false);
+      setErrorMessage("");
+      await initializeApp();
+    }
+  };
+
+  useEffect(() => {
+    initializeApp();
   }, []);
 
   const loadLocalScripts = async (baseDir?: string) => {
@@ -391,22 +565,44 @@ export default function App() {
     }
   };
 
+  const githubAuthDrawer = (
+    <Drawer
+      opened={showGitHubAuth}
+      onClose={() => setShowGitHubAuth(false)}
+      position="right"
+      size="md"
+      title="GitHub Login"
+      overlayProps={{ opacity: 0.35, blur: 2 }}
+    >
+      <GitHubLogin onAuthChange={handleAuthChange} />
+    </Drawer>
+  );
+
   if (appBlocked) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-950">
-        <div className="max-w-md text-center p-8">
-          <div className="mb-6">
+        <div className="w-full max-w-2xl p-8">
+          <div className="mb-6 text-center">
             <IconShield size={64} className="mx-auto text-red-500 mb-4" />
-            <h1 className="text-3xl font-bold text-white mb-2">Access Restricted</h1>
-          </div>
-          <div className="bg-gray-800 border-2 border-red-500/50 rounded-lg p-6 mb-4">
-            <p className="text-gray-300 text-lg">
-              {blockReason}
+            <h1 className="text-3xl font-bold text-white mb-2">Kill Switch Active</h1>
+            <p className="text-gray-400">
+              Application can be opened only after GitHub admin login.
             </p>
           </div>
-          <p className="text-gray-500 text-sm">
-            Please contact your administrator for assistance
-          </p>
+
+          <div className="bg-gray-800 border-2 border-red-500/50 rounded-lg p-6 mb-6">
+            <p className="text-gray-300 text-lg">{blockReason}</p>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-4 mb-4">
+            <GitHubLogin onAuthChange={handleBlockedAuthChange} />
+          </div>
+
+          <div className="flex justify-center">
+            <Button color="pink" variant="light" onClick={initializeApp}>
+              Retry Access Check
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -427,7 +623,7 @@ export default function App() {
     );
   }
 
-  // Jeśli brak klucza administratora - pokaż app w user mode (read-only)
+  // Jeśli brak uprawnień admina GitHub - pokaż app w user mode
   if (!isAdmin) {
     return (
       <AppShell
@@ -438,7 +634,7 @@ export default function App() {
         <AppShell.Header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <Container fluid className="h-full px-6">
             <Flex justify="space-between" align="center" className="h-full">
-              <Group gap="md">
+              <Group gap="md" data-tauri-drag-region style={{ flex: 1, minWidth: 0 }}>
                 <IconSparkles size={28} className="text-pink-500 animate-pulse" />
                 <div>
                   <Text size="lg" fw={700} className="text-pink-500">
@@ -449,6 +645,16 @@ export default function App() {
               </Group>
               
               <Group gap="sm">
+                <Tooltip label="GitHub Login">
+                  <ActionIcon
+                    variant="subtle"
+                    color="pink"
+                    onClick={() => setShowGitHubAuth(true)}
+                  >
+                    <IconGithub size={20} />
+                  </ActionIcon>
+                </Tooltip>
+
                 <Indicator inline label={unreadCount} size={16} color="pink" disabled={unreadCount === 0}>
                   <ActionIcon 
                     variant="subtle" 
@@ -459,6 +665,35 @@ export default function App() {
                   </ActionIcon>
                 </Indicator>
                 <DarkModeToggle />
+
+                {isWindowsFrameless && (
+                  <Group gap={4} ml="xs">
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={handleWindowMinimize}
+                      aria-label="Minimize"
+                    >
+                      <IconWindowMinimize size={16} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={handleWindowToggleMaximize}
+                      aria-label={isWindowMaximized ? "Restore" : "Maximize"}
+                    >
+                      <IconWindowMaximize size={14} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      onClick={handleWindowClose}
+                      aria-label="Close"
+                    >
+                      <IconWindowClose size={16} />
+                    </ActionIcon>
+                  </Group>
+                )}
               </Group>
             </Flex>
           </Container>
@@ -506,6 +741,7 @@ export default function App() {
                   isAdmin={false}
                   favorites={favorites}
                   onToggleFavorite={toggleFavorite}
+                  onRunScript={runScriptDirectly}
                 />
               </Tabs.Panel>
 
@@ -635,6 +871,8 @@ export default function App() {
                 scriptsDir={scriptsDir}
               />
             )}
+
+            <UpdateNotification />
           </Container>
         </AppShell.Main>
 
@@ -647,6 +885,7 @@ export default function App() {
           onClearAll={clearAll}
           unreadCount={unreadCount}
         />
+        {githubAuthDrawer}
       </AppShell>
     );
   }
@@ -660,7 +899,7 @@ export default function App() {
       <AppShell.Header className="border-b border-pink-100 dark:border-gray-700 bg-white dark:bg-gray-800 pink-header-glow">
         <Container fluid className="h-full px-6">
           <Flex justify="space-between" align="center" className="h-full">
-            <Group gap="md">
+            <Group gap="md" data-tauri-drag-region style={{ flex: 1, minWidth: 0 }}>
               <IconSparkles size={28} className="text-pink-500 animate-pulse" />
               <div>
                 <Text size="lg" fw={700} className="bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
@@ -698,8 +937,47 @@ export default function App() {
                 <IconShield size={12} className="inline mr-1" />
                 Admin
               </Badge>
+
+              <Tooltip label="GitHub Login">
+                <ActionIcon
+                  variant="subtle"
+                  color="pink"
+                  onClick={() => setShowGitHubAuth(true)}
+                >
+                  <IconGithub size={20} />
+                </ActionIcon>
+              </Tooltip>
               
               <DarkModeToggle />
+
+              {isWindowsFrameless && (
+                <Group gap={4} ml="xs">
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    onClick={handleWindowMinimize}
+                    aria-label="Minimize"
+                  >
+                    <IconWindowMinimize size={16} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    onClick={handleWindowToggleMaximize}
+                    aria-label={isWindowMaximized ? "Restore" : "Maximize"}
+                  >
+                    <IconWindowMaximize size={14} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    onClick={handleWindowClose}
+                    aria-label="Close"
+                  >
+                    <IconWindowClose size={16} />
+                  </ActionIcon>
+                </Group>
+              )}
             </Group>
           </Flex>
         </Container>
@@ -806,7 +1084,7 @@ export default function App() {
                 isAdmin={isAdmin}
                 favorites={favorites}
                 onToggleFavorite={toggleFavorite}
-                onAuthChange={handleAuthChange}
+                onRunScript={runScriptDirectly}
               />
             </Tabs.Panel>
 
@@ -994,6 +1272,7 @@ export default function App() {
         onClearAll={clearAll}
         unreadCount={unreadCount}
       />
+      {githubAuthDrawer}
     </AppShell>
   );
 }

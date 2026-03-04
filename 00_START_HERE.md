@@ -30,7 +30,6 @@ Python 3.12.9 (Execution)
 p:\python_runner_github\script-runner\
 ├── src/                    # React Frontend (600+ lines)
 ├── src-tauri/              # Rust Backend (300+ lines)
-├── examples/               # Przykładowe skrypty
 ├── .github/workflows/      # GitHub Actions
 ├── Documentation (7 plików):
 │   ├── README.md

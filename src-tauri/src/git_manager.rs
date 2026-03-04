@@ -2,26 +2,37 @@ use git2::Repository;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+use crate::script_manager;
+
 fn count_scripts(scripts_dir: &PathBuf) -> usize {
     if !scripts_dir.exists() {
         return 0;
     }
+
+    let official_root = scripts_dir.join("official");
+    let user_root = script_manager::get_user_scripts_root(scripts_dir.as_path());
+
     WalkDir::new(scripts_dir)
         .into_iter()
         .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_dir())
         .filter(|e| {
             let path = e.path();
-            path.file_name().map_or(false, |name| name == "main.py")
+            let is_official = path.starts_with(&official_root);
+            let is_current_user_script = path.starts_with(&user_root);
+
+            (is_official || is_current_user_script)
+                && (path.join("main.py").exists() || path.join("main.py.enc").exists())
         })
         .count()
 }
 
 pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
     log::info!("Syncing scripts to: {:?}", scripts_dir);
-    
+
     // Count before sync
     let count_before = count_scripts(scripts_dir);
-    
+
     if !scripts_dir.exists() {
         log::info!("Creating scripts directory: {:?}", scripts_dir);
         std::fs::create_dir_all(scripts_dir)
@@ -33,7 +44,7 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
         Ok(_) => {
             log::info!("Existing repository found, syncing...");
             sync_from_git(scripts_dir)
-        },
+        }
         Err(e) => {
             log::info!("No repository found ({}), will clone", e);
             let remote_url = std::env::var("SCRIPTS_REPO_URL").unwrap_or_else(|_| {
@@ -41,40 +52,23 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
             });
             log::info!("Cloning scripts repo from: {}", remote_url);
             log::info!("Target directory: {:?}", scripts_dir);
-            
+
             match Repository::clone(&remote_url, scripts_dir) {
                 Ok(_) => {
                     log::info!("Repository cloned successfully");
                     sync_from_git(scripts_dir)
-                },
+                }
                 Err(e) => {
-                    log::error!("Clone failed: {}. Trying local fallback.", e);
-                    let mut candidates: Vec<PathBuf> = Vec::new();
-                    if let Ok(env_path) = std::env::var("SCRIPTS_LOCAL_PATH") {
-                        candidates.push(PathBuf::from(env_path));
-                    }
-                    candidates.push(PathBuf::from("../script-runner-scripts"));
-                    candidates.push(PathBuf::from("../../script-runner-scripts"));
-                    
-                    log::info!("Searching for local fallback in: {:?}", candidates);
-                    
-                    if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
-                        log::info!("Using local fallback at {:?}", found);
-                        copy_dir_all(&found, scripts_dir)
-                            .map_err(|err| format!("Fallback copy failed: {}", err))?;
-                        Ok("Scripts synced from local fallback".to_string())
-                    } else {
-                        let error_msg = format!(
-                            "Failed to clone repository and no local fallback found.\n\
-                            Error: {}\n\
-                            Repository: {}\n\
-                            Target: {:?}\n\
-                            Tip: Check your internet connection or set SCRIPTS_LOCAL_PATH environment variable.",
-                            e, remote_url, scripts_dir
-                        );
-                        log::error!("{}", error_msg);
-                        Err(error_msg)
-                    }
+                    let error_msg = format!(
+                        "Failed to clone scripts repository.\n\
+                        Error: {}\n\
+                        Repository: {}\n\
+                        Target: {:?}\n\
+                        Tip: Check internet connection and SCRIPTS_REPO_URL.",
+                        e, remote_url, scripts_dir
+                    );
+                    log::error!("{}", error_msg);
+                    Err(error_msg)
                 }
             }
         }
@@ -84,7 +78,7 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
     if let Ok(msg) = result {
         let count_after = count_scripts(scripts_dir);
         let new_count = count_after.saturating_sub(count_before);
-        
+
         if new_count > 0 {
             Ok(format!("{}|new_scripts:{}", msg, new_count))
         } else {
@@ -93,22 +87,6 @@ pub fn sync_scripts(scripts_dir: &PathBuf) -> Result<String, String> {
     } else {
         result
     }
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
-        } else {
-            std::fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
 }
 
 fn sync_from_git(repo_path: &Path) -> Result<String, String> {
@@ -121,9 +99,13 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
                 .map_err(|e| format!("Failed to find remote: {}", e))?;
 
             // Fetch from remote - requires internet connection
-            remote
-                .fetch(&["main"], None, None)
-                .map_err(|e| format!("Failed to fetch (no internet connection?): {}", e))?;
+            if let Err(e) = remote.fetch(&["main"], None, None) {
+                log::warn!(
+                    "Failed to fetch from remote, using cached local scripts: {}",
+                    e
+                );
+                return Ok("Using cached scripts (offline mode)".to_string());
+            }
 
             let oid = repo
                 .refname_to_id("refs/remotes/origin/main")
@@ -145,6 +127,7 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
     }
 }
 
+#[allow(dead_code)]
 pub fn list_available_scripts(scripts_dir: &PathBuf) -> Result<Vec<String>, String> {
     let mut scripts = Vec::new();
 
@@ -153,15 +136,29 @@ pub fn list_available_scripts(scripts_dir: &PathBuf) -> Result<Vec<String>, Stri
         return Ok(scripts);
     }
 
+    let official_root = scripts_dir.join("official");
+    let user_root = script_manager::get_user_scripts_root(scripts_dir.as_path());
+
     for entry in WalkDir::new(scripts_dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "py"))
+        .filter(|e| e.file_type().is_dir())
     {
-        if let Some(name) = entry.file_name().to_str() {
-            scripts.push(name.to_string());
+        let path = entry.path();
+        let is_official = path.starts_with(&official_root);
+        let is_current_user_script = path.starts_with(&user_root);
+
+        if (is_official || is_current_user_script)
+            && (path.join("main.py").exists() || path.join("main.py.enc").exists())
+        {
+            if let Some(name) = entry.file_name().to_str() {
+                scripts.push(name.to_string());
+            }
         }
     }
+
+    scripts.sort();
+    scripts.dedup();
 
     log::info!("Found {} scripts", scripts.len());
     Ok(scripts)

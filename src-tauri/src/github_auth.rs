@@ -50,10 +50,10 @@ fn auth_file_path() -> PathBuf {
 pub async fn github_login(token: String) -> Result<AuthSession, String> {
     // 1. Verify token and get user info
     let user = fetch_github_user(&token).await?;
-    
+
     // 2. Check if user is admin
     let is_admin = check_if_admin(&token, &user.login).await?;
-    
+
     // 3. Create session
     let session = AuthSession {
         token: token.clone(),
@@ -61,11 +61,15 @@ pub async fn github_login(token: String) -> Result<AuthSession, String> {
         is_admin,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    
+
     // 4. Save session locally (encrypted would be better in production)
     save_session(&session)?;
-    
-    log::info!("GitHub login successful: {} (admin: {})", session.user.login, session.is_admin);
+
+    log::info!(
+        "GitHub login successful: {} (admin: {})",
+        session.user.login,
+        session.is_admin
+    );
     Ok(session)
 }
 
@@ -73,8 +77,7 @@ pub async fn github_login(token: String) -> Result<AuthSession, String> {
 pub fn github_logout() -> Result<(), String> {
     let path = auth_file_path();
     if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|e| format!("Failed to remove session file: {}", e))?;
+        fs::remove_file(&path).map_err(|e| format!("Failed to remove session file: {}", e))?;
     }
     log::info!("GitHub logout successful");
     Ok(())
@@ -83,17 +86,17 @@ pub fn github_logout() -> Result<(), String> {
 /// Get current session if exists
 pub fn get_current_session() -> Result<Option<AuthSession>, String> {
     let path = auth_file_path();
-    
+
     if !path.exists() {
         return Ok(None);
     }
-    
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read session: {}", e))?;
-    
-    let session: AuthSession = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse session: {}", e))?;
-    
+
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read session: {}", e))?;
+
+    let session: AuthSession =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse session: {}", e))?;
+
     Ok(Some(session))
 }
 
@@ -119,7 +122,7 @@ pub fn get_current_user() -> Result<Option<GitHubUser>, String> {
 /// Fetch GitHub user info from API
 async fn fetch_github_user(token: &str) -> Result<GitHubUser, String> {
     let client = reqwest::Client::new();
-    
+
     let response = client
         .get(format!("{}/user", GITHUB_API_BASE))
         .header("Authorization", format!("Bearer {}", token))
@@ -129,24 +132,26 @@ async fn fetch_github_user(token: &str) -> Result<GitHubUser, String> {
         .send()
         .await
         .map_err(|e| format!("Failed to connect to GitHub: {}", e))?;
-    
+
     if !response.status().is_success() {
         return Err(format!(
             "GitHub API error: {} - Invalid token or insufficient permissions",
             response.status()
         ));
     }
-    
-    let user: GitHubUser = response.json().await
+
+    let user: GitHubUser = response
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
-    
+
     Ok(user)
 }
 
 /// Fetch admins.json from private repo and check if user is admin
 async fn check_if_admin(token: &str, username: &str) -> Result<bool, String> {
     let client = reqwest::Client::new();
-    
+
     // Fetch admins.json from private repo
     let response = client
         .get(format!(
@@ -160,7 +165,7 @@ async fn check_if_admin(token: &str, username: &str) -> Result<bool, String> {
         .send()
         .await
         .map_err(|e| format!("Failed to fetch admin config: {}", e))?;
-    
+
     if !response.status().is_success() {
         log::warn!(
             "Could not fetch admins.json (status: {}). User '{}' treated as non-admin.",
@@ -169,17 +174,21 @@ async fn check_if_admin(token: &str, username: &str) -> Result<bool, String> {
         );
         return Ok(false);
     }
-    
-    let content = response.text().await
+
+    let content = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to read admin config: {}", e))?;
-    
+
     let config: AdminConfig = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse admin config: {}", e))?;
-    
+
     // Check if username is in admin list
-    let is_admin = config.admins.iter()
+    let is_admin = config
+        .admins
+        .iter()
         .any(|admin| admin.github_username.eq_ignore_ascii_case(username));
-    
+
     log::info!("Admin check for '{}': {}", username, is_admin);
     Ok(is_admin)
 }
@@ -187,19 +196,18 @@ async fn check_if_admin(token: &str, username: &str) -> Result<bool, String> {
 /// Save session to local file
 fn save_session(session: &AuthSession) -> Result<(), String> {
     let path = auth_file_path();
-    
+
     // Create parent directory if needed
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create auth directory: {}", e))?;
     }
-    
+
     let content = serde_json::to_string_pretty(session)
         .map_err(|e| format!("Failed to serialize session: {}", e))?;
-    
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write session file: {}", e))?;
-    
+
+    fs::write(&path, content).map_err(|e| format!("Failed to write session file: {}", e))?;
+
     Ok(())
 }
 

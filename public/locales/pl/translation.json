@@ -13,7 +13,7 @@
     "scripts": "Skrypty",
     "history": "Historia",
     "settings": "Ustawienia",
-    "adminKey": "Klucz Admin",
+    "adminKey": "GitHub Admin",
     "diagnostics": "Diagnostyka"
   },
   "buttons": {
@@ -96,12 +96,12 @@
   },
   "admin": {
     "title": "Panel administratora",
-    "keyNotFound": "Klucz administratora nie znaleziony",
-    "keyValid": "Klucz jest ważny",
-    "generateKey": "Wygeneruj klucz",
-    "keyPath": "Ścieżka klucza",
-    "created": "Stworzony",
-    "lastChecked": "Ostatnia kontrola"
+    "keyNotFound": "Wymagane logowanie GitHub Admin",
+    "keyValid": "Uprawnienia GitHub Admin aktywne",
+    "generateKey": "Zaloguj przez GitHub",
+    "keyPath": "Konto GitHub",
+    "created": "Utworzono sesję",
+    "lastChecked": "Ostatnia weryfikacja"
   },
   "messages": {
     "scriptRunning": "Skrypt jest uruchamiany...",
@@ -111,7 +111,7 @@
     "dependenciesInstalled": "Zależności zainstalowane",
     "syncingScripts": "Synchronizowanie skryptów...",
     "scriptsSynced": "Skrypty zsynchronizowane",
-    "invalidAdminKey": "Niedostępne - wymagany klucz administratora",
+    "invalidAdminKey": "Niedostępne - wymagane logowanie GitHub Admin",
     "copied": "Skopiowano",
     "deletedSuccessfully": "Usunięto pomyślnie",
     "errorOccurred": "Wystąpił błąd",

@@ -17,9 +17,8 @@ export default defineConfig({
         }
       : "localhost",
     watch: {
-      // Ignore external script repo to prevent auto-restart during sync
+      // Ignore heavy folders to keep dev server responsive
       ignored: [
-        "**/script-runner-scripts/**",
         "**/.git/**",
         "**/node_modules/**",
         "**/target/**"

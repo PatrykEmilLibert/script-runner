@@ -128,7 +128,7 @@ No need for `requirements.txt` - but you can add one if you want specific versio
 - [Setup Guide](SETUP.md) - Development setup
 - [README](README.md) - Full documentation
 - [Contributing](CONTRIBUTING.md) - Contributing guidelines
-- [Examples](examples/) - Example scripts
+- [Scripts Location](SCRIPTS_LOCATION.md) - Where synchronized scripts are stored
 
 ## 🎯 Next Steps
 

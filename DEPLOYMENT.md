@@ -15,8 +15,8 @@ Use this checklist when deploying ScriptRunner to your team.
 
 ## Build Process ✅
 
-- [ ] Run `npm run tauri build` on Windows
-- [ ] Run `npm run tauri build` on Mac
+- [ ] Run local sanity build (`npm run tauri build`) if needed
+- [ ] Verify CI build on tag (`.github/workflows/build.yml`)
 - [ ] Verify `.exe` file size reasonable
 - [ ] Verify `.dmg` file size reasonable
 - [ ] Test Windows installer
@@ -25,11 +25,11 @@ Use this checklist when deploying ScriptRunner to your team.
 ## Release ✅
 
 - [ ] Create GitHub release with tag `v1.0.0`
-- [ ] Add release notes (copy from CHANGELOG)
-- [ ] Upload `.exe` to release
-- [ ] Upload `.dmg` to release
+- [ ] Confirm GitHub Actions attached release assets automatically
+- [ ] Confirm updater assets are present (`.sig` + `latest.json`)
+- [ ] Confirm release is published (`draft: false`)
 - [ ] Test download links work
-- [ ] Enable auto-updates in app
+- [ ] Verify in-app updater can detect release
 
 ## Documentation ✅
 
@@ -96,7 +96,8 @@ Use this checklist when deploying ScriptRunner to your team.
 If issues in production:
 
 1. **For app update:**
-   - Release previous version
+   - Re-publish previous known-good tag/version
+   - Ensure `latest.json` points to rollback release
    - Notify users to download
 
 2. **For scripts:**

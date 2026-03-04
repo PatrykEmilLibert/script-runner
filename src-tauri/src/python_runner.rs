@@ -37,34 +37,37 @@ fn get_windows_specific_imports() -> Vec<(&'static str, &'static str)> {
 
 pub fn check_platform_compatibility(script_content: &str) -> Result<Vec<String>, String> {
     let os = std::env::consts::OS;
-    
+
     // Only check non-Windows platforms
     if os == "windows" {
         return Ok(vec![]);
     }
-    
+
     let windows_imports = get_windows_specific_imports();
     let mut found_issues = vec![];
-    
+
     for line in script_content.lines() {
         let trimmed = line.trim();
-        
+
         // Skip comments
         if trimmed.starts_with("#") {
             continue;
         }
-        
+
         for (import, description) in &windows_imports {
             // Check for: import X, from X import Y, from X.Y import Z
             if trimmed.contains(&format!("import {}", import))
                 || trimmed.contains(&format!("from {}", import))
-                || trimmed.contains(&format!("from {}", import.split('.').next().unwrap_or(import)))
+                || trimmed.contains(&format!(
+                    "from {}",
+                    import.split('.').next().unwrap_or(import)
+                ))
             {
                 found_issues.push(format!("  • {} ({})", import, description));
             }
         }
     }
-    
+
     Ok(found_issues)
 }
 
@@ -74,17 +77,16 @@ pub async fn execute_script(
     args: Option<Vec<String>>,
 ) -> Result<String, String> {
     use crate::script_encryption;
-    
+
     // Check if script is encrypted
     let script_content = if script_path.extension().and_then(|s| s.to_str()) == Some("enc") {
         // Decrypt in-memory
         script_encryption::decrypt_script(script_path)?
     } else {
         // Read plain file
-        std::fs::read_to_string(script_path)
-            .map_err(|e| format!("Failed to read script: {}", e))?
+        std::fs::read_to_string(script_path).map_err(|e| format!("Failed to read script: {}", e))?
     };
-    
+
     // Check platform compatibility
     let compatibility_issues = check_platform_compatibility(&script_content)?;
     if !compatibility_issues.is_empty() {
@@ -95,9 +97,11 @@ pub async fn execute_script(
         );
         log::warn!("{}", warning);
     }
-    
+
     // For encrypted scripts: write to temp file, execute, then delete
-    let (temp_file, script_to_execute) = if script_path.extension().and_then(|s| s.to_str()) == Some("enc") {
+    let (temp_file, script_to_execute) = if script_path.extension().and_then(|s| s.to_str())
+        == Some("enc")
+    {
         use std::io::Write;
         let temp_path = std::env::temp_dir().join(format!("sr_temp_{}.py", uuid::Uuid::new_v4()));
         let mut file = std::fs::File::create(&temp_path)
@@ -108,19 +112,19 @@ pub async fn execute_script(
     } else {
         (None, script_path.clone())
     };
-    
+
     let mut cmd = Command::new(python_exec);
     cmd.arg(&script_to_execute);
-    
+
     // Add script arguments if provided
     if let Some(script_args) = args {
         cmd.args(script_args);
     }
-    
+
     let output = cmd
         .output()
         .map_err(|e| format!("Failed to execute script: {}", e))?;
-    
+
     // Clean up temp file if it was created
     if let Some(temp) = temp_file {
         let _ = std::fs::remove_file(temp); // Ignore errors on cleanup

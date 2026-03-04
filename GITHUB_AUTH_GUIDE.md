@@ -141,18 +141,6 @@ If your GitHub username is in `admins.json`, you'll see:
 
 ---
 
-## Legacy Admin Key
-
-The old `sr-admin.key` system is still supported as a **fallback**. If you have an admin key file on your Desktop, it will work even without GitHub login.
-
-However, we recommend **switching to GitHub authentication** for:
-- ✅ Easier admin management
-- ✅ No manual key distribution
-- ✅ Centralized access control
-- ✅ Instant revocation (just remove from `admins.json`)
-
----
-
 ## Quick Links
 
 - [Generate GitHub Token](https://github.com/settings/tokens/new)

@@ -35,4 +35,3 @@ src-tauri/target/
 .env
 .env.local
 kill_switch_cache.json
-src-tauri/script-runner-scripts

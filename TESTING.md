@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive testing checklist for ScriptRunner v0.5.1. Use this to verify all features work correctly before release or after making changes.
+This document provides a comprehensive testing checklist for ScriptRunner v6.0.0. Use this to verify all features work correctly before release or after making changes.
 
 ---
 
@@ -95,8 +95,8 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
   - Responsive layout
 
 - [ ] **Admin (🔧)**
-  - Panel requires key
-  - Unlock mechanism works
+  - Panel requires GitHub admin login
+  - Login mechanism works
   - All admin sections visible
   - Proper access control
 
@@ -122,18 +122,17 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
 
 ## 🛡️ Admin Panel Testing
 
-### With Admin Key
+### With GitHub Admin Login
 
-- [ ] **Key Generation**
-  - "Generate Admin Key" button works
-  - Key is 32 characters
-  - Format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-  - Key displayed in modal
-  - Copy button works
+- [ ] **GitHub Login**
+  - GitHub auth drawer/button works
+  - PAT input accepts token
+  - Login success shows admin status
+  - Session persists across app restart
 
 - [ ] **Unlocking Panel**
-  - Paste key in input field
-  - Click "Unlock Admin Panel"
+  - Login with valid PAT
+  - User exists in `admins.json`
   - Success notification appears
   - Panel unlocks immediately
 
@@ -144,34 +143,28 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
   - Upload button functional
   - Success/error notifications
 
-- [ ] **Admin Key Diagnostics**
-  - "Show Stored Key" button works
-  - Key is correct (matches generated)
-  - "Copy to Clipboard" works
-  - "Regenerate Admin Key" works
-
 - [ ] **System Information**
   - App version displayed
   - Python version shown
   - Platform info correct
   - Repository URLs visible
 
-### Without Admin Key
+### Without GitHub Admin Login
 
 - [ ] **Locked State**
   - Panel shows lock icon
-  - "Generate Admin Key" button visible
-  - Input field for key visible
+  - GitHub login prompt visible
+  - Admin actions disabled
   - No sensitive info shown
 
-- [ ] **Invalid Key Handling**
-  - Error notification on wrong key
+- [ ] **Invalid PAT Handling**
+  - Error notification on invalid/expired token
   - Panel remains locked
   - Try again option available
 
 - [ ] **First-Time Experience**
   - Clear instructions shown
-  - Generate key prompt visible
+  - GitHub login prompt visible
   - Help text displayed
 
 ---
@@ -476,9 +469,9 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
   - Loaded on startup
   - Survives app restart
 
-- [ ] **Admin Key**
+- [ ] **GitHub Session**
   - Saved securely
-  - Loaded on unlock attempt
+  - Loaded on startup
   - Persists across sessions
 
 ### SQLite Database (Analytics)
@@ -559,7 +552,7 @@ This document provides a comprehensive testing checklist for ScriptRunner v0.5.1
 
 ### Invalid Input
 
-- [ ] **Invalid Admin Key**
+- [ ] **Invalid GitHub PAT**
   - Error notification
   - Clear error message
   - Try again option
@@ -640,7 +633,7 @@ Before Release:
 
 **Date**: _______  
 **Tester**: _______  
-**Version**: 0.5.1  
+**Version**: 6.0.0
 **Platform**: Windows / macOS  
 
 **Results**:
@@ -673,4 +666,4 @@ Before Release:
 ---
 
 **Last Updated**: February 2026  
-**Version**: 0.5.1  
+**Version**: 6.0.0

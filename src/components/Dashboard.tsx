@@ -7,8 +7,6 @@ import {
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
-import AdminKeyDiagnostics from "./AdminKeyDiagnostics";
-import GitHubLogin from "./GitHubLogin";
 
 interface DashboardProps {
   scripts: string[];
@@ -17,7 +15,7 @@ interface DashboardProps {
   officialScripts: string[];
   favorites?: string[];
   onToggleFavorite?: (script: string, isFav: boolean) => void;
-  onAuthChange?: (isAdmin: boolean) => void;
+  onRunScript?: (script: string) => void;
 }
 
 interface Stats {
@@ -33,7 +31,7 @@ interface RecentRun {
   duration: number;
 }
 
-export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts, favorites = [], onToggleFavorite, onAuthChange }: DashboardProps) {
+export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts, favorites = [], onToggleFavorite, onRunScript }: DashboardProps) {
   const [stats, setStats] = useState<Stats>({
     totalScripts: scripts.length + officialScripts.length,
     lastSync: Date.now(),
@@ -190,11 +188,6 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
 
   return (
     <Stack gap="xl">
-      {/* GitHub Login - Always visible */}
-      <GitHubLogin onAuthChange={onAuthChange} />
-      
-      {isAdmin && <AdminKeyDiagnostics />}
-
       {/* Quick Stats - Only 2 cards */}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
         <StatCard 
@@ -252,12 +245,14 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
                   radius="md"
                   withBorder
                   className="hover:shadow-lg transition-all cursor-pointer"
+                  onClick={() => onRunScript?.(script)}
                   style={{
                     background: "linear-gradient(135deg, rgba(255,20,147,0.05) 0%, rgba(219,112,147,0.03) 100%)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     textAlign: "center",
+                    cursor: onRunScript ? "pointer" : "default",
                   }}
                 >
                   <Group justify="center" mb="xs" w="100%">
@@ -268,6 +263,19 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
                   <Text size="sm" fw={500} lineClamp={2} mb="xs">
                     {script}
                   </Text>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="pink"
+                    fullWidth
+                    mb="xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRunScript?.(script);
+                    }}
+                  >
+                    Run
+                  </Button>
                   <ActionIcon
                     size="sm"
                     variant="light"

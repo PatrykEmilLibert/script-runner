@@ -1,6 +1,6 @@
 # ScriptRunner Upgrade Guide
 
-## Version 0.5.1 - Pink Theme & Analytics Edition
+## Version 6.0.0 - Pink Theme & Analytics Edition
 
 Welcome to the biggest update of ScriptRunner! This guide will help you migrate from previous versions and understand all the new features.
 
@@ -50,10 +50,10 @@ Features:
 New tab: **Admin** (🔧 icon)
 
 **Access Control:**
-- Requires admin key authentication
-- Key generated via "Generate Admin Key" button
-- 32-character secure random key
-- Stored in system config
+- Requires GitHub admin authentication
+- Login with GitHub Personal Access Token (PAT)
+- Access decided by `admins.json` in `script-runner-config`
+- Admin access can be revoked centrally by removing user from admin list
 
 **Features:**
 1. **Script Upload (Drag & Drop)**
@@ -62,11 +62,11 @@ New tab: **Admin** (🔧 icon)
    - Upload to configured repository
    - Success/error notifications
 
-2. **Admin Key Diagnostics**
-   - View stored admin key
-   - Regenerate if lost
-   - Copy to clipboard
-   - Security warnings
+2. **GitHub Admin Status**
+   - Verify current GitHub admin access
+   - Refresh admin status after `admins.json` changes
+   - Enforce centralized access policy
+   - Security checks via GitHub API
 
 3. **System Information**
    - App version
@@ -165,7 +165,7 @@ npm run tauri build
 On first launch:
 1. **Analytics DB** will be auto-created in app data folder
 2. **Theme** defaults to dark mode (your preference is saved)
-3. **Admin Key** - Generate if you want admin access
+3. **Admin Access** - log in with GitHub PAT if you want admin features
 
 ---
 
@@ -190,7 +190,7 @@ On first launch:
 ### Admin Panel
 ```
 [Placeholder: Admin panel interface]
-- Admin key input
+- GitHub admin login + status
 - Drag & drop upload zone
 ```
 
@@ -215,10 +215,10 @@ On first launch:
 
 ### Accessing Admin Panel
 1. Go to **Admin** tab (🔧)
-2. Click "Generate Admin Key" (first time only)
-3. **Save the key securely!**
-4. Enter key to unlock panel
-5. Upload scripts, view diagnostics
+2. Open **GitHub Login** (drawer/button)
+3. Paste GitHub PAT with access to `script-runner-config`
+4. Confirm your username is in `admins.json`
+5. Upload scripts and manage system features
 
 ### Customizing Theme
 1. Click sun/moon icon (top-right)
@@ -239,8 +239,8 @@ On first launch:
 ### Q: Will my old scripts work?
 **A:** Yes! 100% backward compatible. All scripts work exactly as before.
 
-### Q: How do I get the admin key?
-**A:** Go to Admin tab → "Generate Admin Key" → Copy and save it securely.
+### Q: How do I get admin access?
+**A:** Log in with GitHub PAT and ensure your GitHub username is present in `admins.json`.
 
 ### Q: Where is analytics data stored?
 **A:** In SQLite database at:
@@ -253,8 +253,8 @@ On first launch:
 ### Q: How do I change theme color from pink?
 **A:** Edit `src/theme.ts` and rebuild. Custom themes coming in future updates.
 
-### Q: What if I lose the admin key?
-**A:** Go to Admin tab → "Admin Key Diagnostics" → "Regenerate Admin Key"
+### Q: What if I lose access to admin features?
+**A:** Generate a new GitHub PAT or ask repository owner to add your GitHub username to `admins.json`.
 
 ### Q: Do notifications slow down the app?
 **A:** No! Notifications are lightweight and use hardware acceleration.
@@ -267,7 +267,7 @@ On first launch:
 
 ### Q: How do I upload scripts via Admin Panel?
 **A:**
-1. Unlock Admin Panel with key
+1. Log in as GitHub admin
 2. Scroll to "Upload Scripts" section
 3. Drag `.py` file to the dropzone
 4. Click "Upload to Repository"
@@ -285,9 +285,10 @@ On first launch:
 3. Clear browser cache (if dev mode)
 
 ### Admin Panel won't unlock?
-1. Check if admin key is correct (32 characters)
-2. Regenerate key if lost
-3. Check browser console for errors
+1. Check if PAT is valid and not expired
+2. Confirm PAT has access to `script-runner-config`
+3. Confirm your username exists in `admins.json`
+4. Check browser console for errors
 
 ### Theme toggle not working?
 1. Check if `zustand` is installed
@@ -305,7 +306,7 @@ On first launch:
 
 After upgrading:
 1. ✅ Explore Analytics dashboard
-2. ✅ Generate admin key
+2. ✅ Configure GitHub admin login
 3. ✅ Try the new pink theme
 4. ✅ Test drag & drop upload
 5. ✅ Review notification system
@@ -320,6 +321,6 @@ For issues or questions:
 
 ---
 
-**Version:** 0.5.1  
+**Version:** 6.0.0
 **Release Date:** February 2026  
 **Codename:** Pink Analytics  

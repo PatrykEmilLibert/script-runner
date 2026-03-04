@@ -26,7 +26,7 @@ A modern desktop application built with **Tauri + React** for executing Python s
 - Visual data representation
 
 ### 🛡️ Admin Panel
-- Secure admin key authentication
+- Secure GitHub admin authentication
 - Script upload/management via drag & drop
 - System diagnostics
 - Configuration override
@@ -175,18 +175,18 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 
 ## Deployment
 
-### Create GitHub Releases
+### Create GitHub Releases (recommended)
 
-1. Tag version: `git tag v0.1.0`
-2. Push tag: `git push origin v0.1.0`
-3. Build: `npm run tauri build`
-4. Upload `.exe` and `.dmg` to GitHub Releases
+1. Ensure release secrets are configured (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_UPDATER_PUBLIC_KEY`, optional Apple signing secrets).
+2. Tag version: `git tag v0.1.0`
+3. Push tag: `git push origin v0.1.0`
+4. GitHub Actions builds and publishes release assets automatically (including updater `.sig` files and `latest.json`).
 
 ### Distribute to Team
 
 - **Windows**: Download `.exe` and run installer
-- **Mac**: Download `.dmg`, drag app to Applications
-- **Auto-update**: App checks releases on startup
+- **Mac**: Download `.dmg`, drag app to Applications, then run `START_MAC.command` (included in release assets) for unsigned builds; if double-click fails, use `bash START_MAC.command`
+- **Auto-update**: App checks signed updater metadata from `latest.json` on startup
 
 ## Security Notes
 
@@ -236,7 +236,7 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 ### 🛡️ Admin Panel
 ```
 [Placeholder: Admin panel interface]
-- Admin key authentication
+- GitHub admin authentication
 - Drag & drop script upload
 - System diagnostics panel
 ```

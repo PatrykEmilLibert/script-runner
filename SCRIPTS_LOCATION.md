@@ -1,13 +1,10 @@
 # 📂 Where Are My Scripts Stored?
 
-## Development Mode
-When running `npm run tauri dev`, scripts are loaded from:
-- `../../script-runner-scripts/`
-- `../script-runner-scripts/`
-- `./script-runner-scripts/`
+Scripts are stored in the user data directory and synchronized from remote GitHub repository.
 
-## Production Mode (Built Application)
-When running the built `.exe` or `.app`, scripts are stored in:
+## Script Storage Location
+
+When running the app (`dev` and built), scripts are stored in:
 
 ### Windows
 ```
@@ -33,7 +30,7 @@ C:\Users\<YourUsername>\AppData\Roaming\ScriptRunner\scripts\
 
 2. **Subsequent Launches**: The app syncs with GitHub to get updates
 
-3. **Offline Mode**: If GitHub is unavailable, the app uses locally cached scripts
+3. **Offline Mode**: If GitHub is unavailable (after first successful clone), app uses cached local scripts
 
 ## Custom Location
 
@@ -68,7 +65,6 @@ export SR_SCRIPTS_DIR="/path/to/your/scripts"
 If you can't connect to GitHub, you can:
 1. Clone the repository manually
 2. Set `SR_SCRIPTS_DIR` to point to your local clone
-3. Or set `SCRIPTS_LOCAL_PATH` to a fallback location
 
 Example:
 ```powershell
