@@ -114,7 +114,9 @@ pub async fn add_to_whitelist(machine_id: String) -> Result<String, String> {
     config.whitelist.push(machine_id.clone());
     push_config_to_github(config).await?;
 
-    let mut cached_config = fetch_current_config().await.unwrap_or(KillSwitchConfig::default());
+    let mut cached_config = fetch_current_config()
+        .await
+        .unwrap_or(KillSwitchConfig::default());
     if !cached_config.whitelist.contains(&machine_id) {
         cached_config.whitelist.push(machine_id.clone());
     }
@@ -137,7 +139,9 @@ pub async fn remove_from_whitelist(machine_id: String) -> Result<String, String>
 
     push_config_to_github(config).await?;
 
-    let mut cached_config = fetch_current_config().await.unwrap_or(KillSwitchConfig::default());
+    let mut cached_config = fetch_current_config()
+        .await
+        .unwrap_or(KillSwitchConfig::default());
     cached_config.whitelist.retain(|id| id != &machine_id);
     cache_local_config(&cached_config);
 
@@ -157,7 +161,9 @@ pub async fn set_custom_message(
 
     push_config_to_github(config).await?;
 
-    let mut cached_config = fetch_current_config().await.unwrap_or(KillSwitchConfig::default());
+    let mut cached_config = fetch_current_config()
+        .await
+        .unwrap_or(KillSwitchConfig::default());
     cached_config.message = message;
     cached_config.redirect_url = redirect_url;
     cache_local_config(&cached_config);

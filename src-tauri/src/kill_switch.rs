@@ -80,10 +80,7 @@ pub async fn check_remote_status_advanced() -> Result<KillSwitchConfig, String> 
     match request.send().await {
         Ok(response) => {
             if !response.status().is_success() {
-                log::warn!(
-                    "Kill switch fetch returned status {}",
-                    response.status()
-                );
+                log::warn!("Kill switch fetch returned status {}", response.status());
                 if let Some(cached) = get_cached_status() {
                     log::info!("Using cached kill switch status after API error");
                     return Ok(cached);

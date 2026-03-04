@@ -3,10 +3,10 @@
     windows_subsystem = "windows"
 )]
 
+use chrono::TimeZone;
 use std::env;
 use std::path::PathBuf;
 use tauri::State;
-use chrono::TimeZone;
 use tauri_plugin_updater::UpdaterExt;
 
 mod analytics;
@@ -66,7 +66,10 @@ fn releases_repo() -> String {
 }
 
 fn releases_latest_api_url() -> String {
-    format!("https://api.github.com/repos/{}/releases/latest", releases_repo())
+    format!(
+        "https://api.github.com/repos/{}/releases/latest",
+        releases_repo()
+    )
 }
 
 fn releases_page_url() -> String {
@@ -330,7 +333,9 @@ async fn schedule_kill_switch(scheduled_for: String, reason: String) -> Result<S
         Ok(dt) => dt.to_rfc3339(),
         Err(_) => {
             let naive = chrono::NaiveDateTime::parse_from_str(&scheduled_for, "%Y-%m-%dT%H:%M")
-                .or_else(|_| chrono::NaiveDateTime::parse_from_str(&scheduled_for, "%Y-%m-%dT%H:%M:%S"))
+                .or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(&scheduled_for, "%Y-%m-%dT%H:%M:%S")
+                })
                 .map_err(|e| format!("Invalid scheduled date format: {}", e))?;
 
             let local_dt = chrono::Local
@@ -701,7 +706,11 @@ async fn check_for_updates() -> Result<bool, String> {
                 Ok(json) => {
                     if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
                         let latest = tag.trim_start_matches('v');
-                        log::info!("Current version: {}, Latest version: {}", CURRENT_VERSION, latest);
+                        log::info!(
+                            "Current version: {}, Latest version: {}",
+                            CURRENT_VERSION,
+                            latest
+                        );
                         Ok(is_newer_version(latest, CURRENT_VERSION))
                     } else {
                         Ok(false)
@@ -732,21 +741,19 @@ async fn get_download_url() -> Result<String, String> {
         .send()
         .await
     {
-        Ok(response) => {
-            match response.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    if let Some(url) = json.get("html_url").and_then(|v| v.as_str()) {
-                        Ok(url.to_string())
-                    } else {
-                        Ok(fallback_url)
-                    }
-                }
-                Err(e) => {
-                    log::warn!("Failed to parse GitHub response: {}", e);
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(json) => {
+                if let Some(url) = json.get("html_url").and_then(|v| v.as_str()) {
+                    Ok(url.to_string())
+                } else {
                     Ok(fallback_url)
                 }
             }
-        }
+            Err(e) => {
+                log::warn!("Failed to parse GitHub response: {}", e);
+                Ok(fallback_url)
+            }
+        },
         Err(e) => {
             log::warn!("Failed to fetch releases from GitHub: {}", e);
             Ok(fallback_url)
