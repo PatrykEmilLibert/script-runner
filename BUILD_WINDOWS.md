@@ -27,6 +27,12 @@ Optional but strongly recommended for fewer Windows Defender / SmartScreen warni
 Notes:
 - For best results use an EV code-signing certificate.
 - Even with signing, first releases can still show warnings until reputation builds.
+- Without a trusted CA certificate, Defender/SmartScreen warnings cannot be reliably eliminated.
+
+Quick setup once you receive a `.pfx` certificate:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows-codesign-secrets.ps1 -PfxPath "C:\path\to\codesign.pfx" -PfxPassword "<YOUR_PASSWORD>"
+```
 
 Release flow:
 1. Bump version in `src-tauri/tauri.conf.json` and `src-tauri/tauri.release.conf.json`.
