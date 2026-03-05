@@ -19,6 +19,8 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +45,14 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check Windows signing configuration
+        run: |
+          if (-not "$env:WINDOWS_CERTIFICATE" -or -not "$env:WINDOWS_CERTIFICATE_PASSWORD") {
+            Write-Host "::warning::Windows code signing secrets are missing. Defender/SmartScreen warnings are more likely."
+          } else {
+            Write-Host "Windows code signing secrets detected. Authenticode signing will be applied."
+          }
 
       - name: Create Python venv and install dependencies
         run: |
@@ -72,6 +82,66 @@ jobs:
           mkdir portable
           copy src-tauri\target\release\script-runner.exe portable\ScriptRunner-Portable.exe
           echo "Standalone portable version - no installation required" > portable\README.txt
+
+      - name: Sign Windows artifacts (optional Authenticode)
+        run: |
+          if (-not "$env:WINDOWS_CERTIFICATE" -or -not "$env:WINDOWS_CERTIFICATE_PASSWORD") {
+            Write-Host "Skipping Windows Authenticode signing (missing WINDOWS_CERTIFICATE or WINDOWS_CERTIFICATE_PASSWORD)."
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "windows-codesign.pfx"
+          [System.IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            throw "signtool.exe not found on runner"
+          }
+
+          $targets = @()
+          $targets += Get-ChildItem "src-tauri/target/release/bundle/nsis/*setup.exe" -File
+          $targets += Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" -File
+          if (Test-Path "portable/ScriptRunner-Portable.exe") {
+            $targets += Get-Item "portable/ScriptRunner-Portable.exe"
+          }
+
+          if ($targets.Count -eq 0) {
+            throw "No Windows artifacts found to sign"
+          }
+
+          foreach ($target in $targets) {
+            & $signtool.Source sign /fd SHA256 /td SHA256 /tr "http://timestamp.digicert.com" /f $certPath /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "$($target.FullName)"
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool failed for $($target.FullName)"
+            }
+          }
+
+          Remove-Item $certPath -Force
+
+      - name: Refresh Windows updater signature
+        run: |
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis/*setup.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "NSIS installer not found in src-tauri/target/release/bundle/nsis"
+          }
+
+          $sigPath = "$($installer.FullName).sig"
+          if (Test-Path $sigPath) {
+            Remove-Item $sigPath -Force
+          }
+
+          $env:TAURI_PRIVATE_KEY = $env:TAURI_SIGNING_PRIVATE_KEY
+          if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW -and $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW.Trim().Length -gt 0) {
+            $env:TAURI_PRIVATE_KEY_PASSWORD = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW
+          } else {
+            Remove-Item Env:TAURI_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+          }
+
+          npm run tauri -- signer sign "$($installer.FullName)"
+
+          if (-not (Test-Path $sigPath)) {
+            throw "Failed to regenerate updater signature: $sigPath"
+          }
 
       - name: Prepare Windows updater metadata
         run: |

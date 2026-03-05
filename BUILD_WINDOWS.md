@@ -20,6 +20,14 @@ Required repository secrets:
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (only if your key is password-protected)
 - `TAURI_UPDATER_PUBLIC_KEY`
 
+Optional but strongly recommended for fewer Windows Defender / SmartScreen warnings:
+- `WINDOWS_CERTIFICATE` (base64-encoded `.pfx` code-signing certificate)
+- `WINDOWS_CERTIFICATE_PASSWORD`
+
+Notes:
+- For best results use an EV code-signing certificate.
+- Even with signing, first releases can still show warnings until reputation builds.
+
 Release flow:
 1. Bump version in `src-tauri/tauri.conf.json` and `src-tauri/tauri.release.conf.json`.
 2. Push commit to `main`.

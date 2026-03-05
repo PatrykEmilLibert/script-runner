@@ -177,7 +177,7 @@ async fn get_script_logs(script_name: String) -> Result<String, String>
 
 ### Create GitHub Releases (recommended)
 
-1. Ensure release secrets are configured (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_UPDATER_PUBLIC_KEY`, optional Apple signing secrets).
+1. Ensure release secrets are configured (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_UPDATER_PUBLIC_KEY`, optional `WINDOWS_CERTIFICATE` + `WINDOWS_CERTIFICATE_PASSWORD`, optional Apple signing secrets).
 2. Tag version: `git tag v0.1.0`
 3. Push tag: `git push origin v0.1.0`
 4. GitHub Actions builds and publishes release assets automatically (including updater `.sig` files and `latest.json`).
