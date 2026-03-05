@@ -15,12 +15,12 @@ pub struct RunRecord {
 }
 
 pub fn history_file() -> PathBuf {
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        let dir = PathBuf::from(appdata).join("script-runner");
-        let _ = fs::create_dir_all(&dir);
-        return dir.join("run_history.json");
-    }
-    PathBuf::from("./run_history.json")
+    let app_data = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("ScriptRunner");
+
+    let _ = fs::create_dir_all(&app_data);
+    app_data.join("run_history.json")
 }
 
 pub fn add_record(record: RunRecord) -> Result<(), String> {

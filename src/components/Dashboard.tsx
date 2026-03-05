@@ -31,6 +31,13 @@ interface RecentRun {
   duration: number;
 }
 
+interface HistoryRunRecord {
+  script_name: string;
+  start_time: string;
+  duration_ms: number;
+  status: string;
+}
+
 export default function Dashboard({ scripts, onAddScript, isAdmin, officialScripts, favorites = [], onToggleFavorite, onRunScript }: DashboardProps) {
   const [stats, setStats] = useState<Stats>({
     totalScripts: scripts.length + officialScripts.length,
@@ -46,25 +53,29 @@ export default function Dashboard({ scripts, onAddScript, isAdmin, officialScrip
     try {
       setLoading(true);
       
-      // Get simple stats
-      const statsData = await invoke<Stats>("get_stats").catch(() => ({
+      const historyRecords = await invoke<HistoryRunRecord[]>("get_run_history", { limit: 100 });
+      const runsData: RecentRun[] = historyRecords.map((record) => ({
+        timestamp: record.start_time,
+        scriptName: record.script_name,
+        status: record.status === "success" ? "SUCCESS" : "FAILED",
+        duration: Math.round((record.duration_ms / 1000) * 10) / 10,
+      }));
+
+      setStats({
         totalScripts: scripts.length + officialScripts.length,
         lastSync: Date.now(),
         appStatus: "Healthy",
-      }));
-      setStats(statsData);
-
-      // Get recent runs
-      const fallbackRuns: RecentRun[] = [
-        { timestamp: new Date().toISOString(), scriptName: "system_info", status: "SUCCESS", duration: 1.2 },
-        { timestamp: new Date(Date.now() - 60000).toISOString(), scriptName: "kalkulator", status: "SUCCESS", duration: 0.8 },
-        { timestamp: new Date(Date.now() - 120000).toISOString(), scriptName: "data_analysis", status: "FAILED", duration: 2.3 },
-      ];
-      const runsData = await invoke<RecentRun[]>("get_recent_runs").catch(() => fallbackRuns);
+      });
       setRecentRuns(runsData);
 
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
+      setRecentRuns([]);
+      setStats({
+        totalScripts: scripts.length + officialScripts.length,
+        lastSync: Date.now(),
+        appStatus: "Healthy",
+      });
     } finally {
       setLoading(false);
     }

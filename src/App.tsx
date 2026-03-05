@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation } from "react-i18next";
 import { 
   AppShell, 
@@ -93,6 +94,13 @@ export default function App() {
   const [showGitHubAuth, setShowGitHubAuth] = useState(false);
   const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("6.0.2");
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion("6.0.2"));
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem(favoritesStorageKey);
@@ -1256,7 +1264,7 @@ export default function App() {
           className="text-center py-4 mt-8 border-t border-pink-100 dark:border-gray-700"
         >
           <Text size="xs" c="dimmed">
-            Script Runner v1.0.0 • Made with{' '}
+            Script Runner v{appVersion} • Made with{' '}
             <span className="text-pink-500 animate-pulse">♥</span> and{' '}
             <IconSparkles size={12} className="inline text-pink-500" />
           </Text>
