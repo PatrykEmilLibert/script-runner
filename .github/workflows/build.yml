@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +58,14 @@ jobs:
           SR_UPDATER_PUBKEY: ${{ env.TAURI_UPDATER_PUBLIC_KEY }}
           SR_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
           SR_RELEASES_REPO: ${{ github.repository }}
-        run: npm run tauri build -- --config src-tauri/tauri.release.conf.json
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW -and $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW.Trim().Length -gt 0) {
+            $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW
+          } else {
+            Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+          }
+
+          npm run tauri build -- --config src-tauri/tauri.release.conf.json
 
       - name: Create Portable Windows Build
         run: |
@@ -117,7 +124,7 @@ jobs:
     runs-on: macos-latest
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -179,7 +186,14 @@ jobs:
           SR_UPDATER_PUBKEY: ${{ env.TAURI_UPDATER_PUBLIC_KEY }}
           SR_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
           SR_RELEASES_REPO: ${{ github.repository }}
-        run: npm run tauri build -- --config src-tauri/tauri.release.conf.json
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW" ]; then
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW"
+          else
+            unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
+
+          npm run tauri build -- --config src-tauri/tauri.release.conf.json
 
       - name: Prepare macOS release files
         run: |

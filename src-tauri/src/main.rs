@@ -221,7 +221,7 @@ async fn send_desktop_notification(
         use std::process::Command;
 
         let _ = Command::new("osascript")
-            .args(&[
+            .args([
                 "-e",
                 &format!(
                     r#"display notification "{}" with title "{}""#,
@@ -238,7 +238,7 @@ async fn send_desktop_notification(
         use std::process::Command;
 
         let _ = Command::new("notify-send")
-            .args(&[&title, &body])
+            .args([&title, &body])
             .output()
             .map_err(|e| format!("Failed to send Linux notification: {}", e))?;
     }
