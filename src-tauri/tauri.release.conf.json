@@ -24,6 +24,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDQkQ3MDRFODZCNjVEODEKUldTQlhiYUdUbkM5Yk1ZY01hanU2ZkY5S3VLY05mWnd1U1dETWxaWlhMOThNTktiNlY2cDR0MmsK",
+      "endpoints": [
+        "https://github.com/PatrykEmilLibert/script-runner/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
