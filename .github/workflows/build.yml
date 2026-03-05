@@ -193,6 +193,15 @@ jobs:
             unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
           fi
 
+          if [ -z "$APPLE_CERTIFICATE" ] || \
+             [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || \
+             [ -z "$APPLE_SIGNING_IDENTITY" ] || \
+             [ -z "$APPLE_ID" ] || \
+             [ -z "$APPLE_PASSWORD" ] || \
+             [ -z "$APPLE_TEAM_ID" ]; then
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+          fi
+
           npm run tauri build -- --config src-tauri/tauri.release.conf.json
 
       - name: Prepare macOS release files
