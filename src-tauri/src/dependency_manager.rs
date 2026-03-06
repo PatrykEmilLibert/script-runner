@@ -196,6 +196,7 @@ const STDLIB_MODULES: &[&str] = &[
     "ctypes",
     "threading",
     "multiprocessing",
+    "concurrent",
     "asyncio",
     "queue",
     "socket",
