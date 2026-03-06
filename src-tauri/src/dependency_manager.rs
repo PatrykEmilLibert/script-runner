@@ -168,10 +168,9 @@ fn run_pip_install(
 fn extract_unavailable_packages(stderr: &str) -> HashSet<String> {
     let mut unavailable = HashSet::new();
 
-    let could_not_find = Regex::new(
-        r"Could not find a version that satisfies the requirement\s+([^\s\(]+)",
-    )
-    .unwrap();
+    let could_not_find =
+        Regex::new(r"Could not find a version that satisfies the requirement\s+([^\s\(]+)")
+            .unwrap();
     for caps in could_not_find.captures_iter(stderr) {
         if let Some(pkg) = caps.get(1) {
             unavailable.insert(pkg.as_str().trim().to_string());
