@@ -225,22 +225,16 @@ async fn send_desktop_notification(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
-
-        // Use Windows Toast Notifications via PowerShell
         let ps_script = format!(
             r#"
             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
             [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-Command", &script]);
-        apply_no_console_window(&mut cmd);
-
-        let output = cmd
-            .output()
-            .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
+            $template = @"
+            <toast>
+                <visual>
+                    <binding template=\"ToastGeneric\">
                         <text>{}</text>
                         <text>{}</text>
                     </binding>
@@ -257,8 +251,11 @@ async fn send_desktop_notification(
             body.replace('"', "\\\"")
         );
 
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_script])
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", &ps_script]);
+        apply_no_console_window(&mut cmd);
+
+        let output = cmd
             .output()
             .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
 
