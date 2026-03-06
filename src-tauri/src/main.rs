@@ -12,37 +12,40 @@ use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(target_os = "windows")]
-        let ps_script = format!(
-            r#"
-            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-            [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+use std::os::windows::process::CommandExt;
 
-            $template = @"
-            <toast>
-                <visual>
-                    <binding template=\"ToastGeneric\">
-                        <text>{}</text>
-                        <text>{}</text>
-                    </binding>
-                </visual>
-            </toast>
-"@
+mod analytics;
+mod dependency_manager;
+mod git_manager;
+mod github_auth;
+mod kill_switch;
+mod kill_switch_manager;
+mod python_runner;
+mod run_history;
+mod script_encryption;
+mod script_manager;
+mod settings;
 
-            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-            $xml.LoadXml($template)
-            $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("ScriptRunner").Show($toast)
-            "#,
-            title.replace('"', "\\\""),
-            body.replace('"', "\\\"")
-        );
+#[derive(Clone)]
+pub struct AppState {
+    scripts_dir: PathBuf,
+    python_exec: PathBuf,
+}
 
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", &ps_script]);
-        apply_no_console_window(&mut cmd);
+const DEFAULT_RELEASES_REPO: &str = "PatrykEmilLibert/script-runner";
+const DEFAULT_UPDATER_ENDPOINT: &str =
+    "https://github.com/PatrykEmilLibert/script-runner/releases/latest/download/latest.json";
+const COMPILED_RELEASES_REPO: Option<&str> = option_env!("SR_RELEASES_REPO");
+const COMPILED_UPDATER_ENDPOINT: Option<&str> = option_env!("SR_UPDATER_ENDPOINT");
+const COMPILED_UPDATER_PUBKEY: Option<&str> = option_env!("SR_UPDATER_PUBKEY");
 
-        let output = cmd
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+#[derive(Debug, serde::Serialize)]
+struct AvailableUpdateInfo {
+    version: String,
+    current_version: String,
     notes: Option<String>,
     pub_date: Option<String>,
     download_url: String,
