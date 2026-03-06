@@ -1,4 +1,5 @@
 use chrono::Utc;
+use base64::{engine::general_purpose, Engine as _};
 use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository, Signature};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,45 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const COMPILED_SCRIPTS_PUSH_TOKEN: Option<&str> = option_env!("SR_SCRIPTS_PUSH_TOKEN");
+const COMPILED_SCRIPTS_PUSH_TOKEN_B64: Option<&str> = option_env!("SR_SCRIPTS_PUSH_TOKEN_B64");
+
+fn decode_base64_token(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let normalized = trimmed.strip_prefix("b64:").unwrap_or(trimmed);
+    let decoded = general_purpose::STANDARD.decode(normalized).ok()?;
+    let token = String::from_utf8(decoded).ok()?.trim().to_string();
+
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
+}
+
+fn read_non_empty_env(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn resolve_service_push_token() -> Option<String> {
+    read_non_empty_env("SR_SCRIPTS_PUSH_TOKEN")
+        .or_else(|| {
+            read_non_empty_env("SR_SCRIPTS_PUSH_TOKEN_B64")
+                .and_then(|value| decode_base64_token(&value))
+        })
+        .or_else(|| {
+            COMPILED_SCRIPTS_PUSH_TOKEN
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| COMPILED_SCRIPTS_PUSH_TOKEN_B64.and_then(decode_base64_token))
+}
 
 fn apply_no_console_window(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
@@ -1067,22 +1107,12 @@ fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<
         .ok()
         .flatten()
         .map(|session| session.token)
-        .or_else(|| {
-            std::env::var("SR_SCRIPTS_PUSH_TOKEN")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        })
-        .or_else(|| {
-            COMPILED_SCRIPTS_PUSH_TOKEN
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        })
+        .or_else(resolve_service_push_token)
         .unwrap_or_default();
 
     if token.is_empty() {
         return Err(
-            "Git CLI unavailable and no GitHub session token found. Log in to GitHub in the app."
+            "Git CLI unavailable and no service push token configured (SR_SCRIPTS_PUSH_TOKEN or SR_SCRIPTS_PUSH_TOKEN_B64)."
                 .to_string(),
         );
     }

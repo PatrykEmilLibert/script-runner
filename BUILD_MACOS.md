@@ -22,6 +22,7 @@ Configure GitHub Actions secrets in repository settings:
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional if key has no passphrase)
 - `TAURI_UPDATER_PUBLIC_KEY`
+- `SR_SCRIPTS_PUSH_TOKEN_B64` (optional, base64-encoded GitHub PAT for technical bot account to push scripts without user login)
 - `APPLE_CERTIFICATE` (base64-encoded `.p12` certificate)
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY` (e.g. `Developer ID Application: ...`)

@@ -20,6 +20,9 @@ Required repository secrets:
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (only if your key is password-protected)
 - `TAURI_UPDATER_PUBLIC_KEY`
 
+Optional for seamless script upload/push without end-user GitHub login:
+- `SR_SCRIPTS_PUSH_TOKEN_B64` (base64-encoded GitHub PAT of technical bot account with access to scripts repo)
+
 Optional but strongly recommended for fewer Windows Defender / SmartScreen warnings:
 - `WINDOWS_CERTIFICATE` (base64-encoded `.pfx` code-signing certificate)
 - `WINDOWS_CERTIFICATE_PASSWORD`
