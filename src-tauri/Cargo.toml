@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "script-runner"
 version = "6.0.12"
 edition = "2021"
