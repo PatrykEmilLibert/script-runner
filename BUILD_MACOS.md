@@ -46,6 +46,7 @@ Double-click the `.dmg` file to mount it, then drag ScriptRunner to Applications
 
 For unsigned builds, the CI release also includes `START_MAC.command`.
 After moving app to Applications, run `START_MAC.command` once to remove quarantine and launch ScriptRunner.
+If needed, the script now asks for admin password and also adds app to Gatekeeper exceptions automatically.
 If double-click does not start it, run: `bash START_MAC.command` in Terminal.
 
 ## Troubleshooting: "ScriptRunner is damaged and can't be opened"

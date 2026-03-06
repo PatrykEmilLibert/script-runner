@@ -33,11 +33,30 @@ fi
 echo "App found at: $APP_PATH"
 echo "Removing quarantine attribute (Gatekeeper workaround)..."
 
-if xattr -dr com.apple.quarantine "$APP_PATH"; then
+QUARANTINE_REMOVED=false
+
+if xattr -dr com.apple.quarantine "$APP_PATH" 2>/dev/null; then
+  QUARANTINE_REMOVED=true
   echo "Quarantine attribute removed."
 else
-  echo "Could not remove quarantine attribute automatically."
-  echo "You may need to run this script with elevated permissions."
+  echo "Standard removal failed (likely permission issue)."
+  echo "Trying elevated Gatekeeper workaround..."
+
+  ELEVATED_CMD="xattr -dr com.apple.quarantine \"$APP_PATH\"; spctl --add --label ScriptRunner \"$APP_PATH\""
+  if osascript -e "do shell script \"$ELEVATED_CMD\" with administrator privileges" >/dev/null 2>&1; then
+    QUARANTINE_REMOVED=true
+    echo "Quarantine removed with admin privileges and app added to Gatekeeper exceptions."
+  else
+    echo "Could not remove quarantine automatically."
+    echo "Run this manually in Terminal:"
+    echo "sudo xattr -dr com.apple.quarantine \"$APP_PATH\""
+    echo "sudo spctl --add --label ScriptRunner \"$APP_PATH\""
+  fi
+fi
+
+if [ "$QUARANTINE_REMOVED" = true ]; then
+  echo "Verifying Gatekeeper status..."
+  spctl -a -vv "$APP_PATH" || true
 fi
 
 echo ""
