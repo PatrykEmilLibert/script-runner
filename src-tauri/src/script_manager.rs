@@ -1,9 +1,137 @@
 use chrono::Utc;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn apply_no_console_window(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+fn detect_hardcoded_paths(script_content: &str) -> Vec<String> {
+    let windows_abs = Regex::new(r#"(?i)[a-z]:\\[^\"'\s]+"#).unwrap();
+    let unix_abs = Regex::new(r#"(?i)/(users|home|var|etc|opt|tmp)/[^\"'\s]+"#).unwrap();
+
+    let mut findings = Vec::new();
+
+    for (index, line) in script_content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+
+        for m in windows_abs.find_iter(line) {
+            findings.push(format!("L{}: {}", index + 1, m.as_str()));
+            if findings.len() >= 20 {
+                return findings;
+            }
+        }
+
+        for m in unix_abs.find_iter(line) {
+            findings.push(format!("L{}: {}", index + 1, m.as_str()));
+            if findings.len() >= 20 {
+                return findings;
+            }
+        }
+    }
+
+    findings
+}
+
+fn format_portability_warning(findings: &[String]) -> String {
+    if findings.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        "\n\n⚠️ Wykryto potencjalne hardcoded ścieżki ({}):\n{}\n\n💡 Zalecenie: używaj Path(__file__).parent dla configów i plików lokalnych.",
+        findings.len(),
+        findings.join("\n")
+    )
+}
+
+fn extract_basename(path: &str) -> Option<String> {
+    path.rsplit(['\\', '/'])
+        .find(|part| !part.trim().is_empty())
+        .map(|part| part.trim().to_string())
+}
+
+fn ensure_pathlib_import(content: &str) -> String {
+    if content.contains("from pathlib import Path") {
+        return content.to_string();
+    }
+
+    let mut lines: Vec<String> = content.lines().map(|line| line.to_string()).collect();
+    let mut insert_at = 0usize;
+
+    if lines
+        .first()
+        .map(|line| line.starts_with("#!"))
+        .unwrap_or(false)
+    {
+        insert_at = 1;
+    }
+
+    if lines
+        .get(insert_at)
+        .map(|line| line.contains("coding:"))
+        .unwrap_or(false)
+    {
+        insert_at += 1;
+    }
+
+    lines.insert(insert_at, "from pathlib import Path".to_string());
+    lines.join("\n")
+}
+
+fn auto_rewrite_paths_to_script_dir(script_content: &str) -> (String, usize) {
+    let win_double = Regex::new(r#"\"(?i:[a-z]:\\[^\"\n]+)\""#).unwrap();
+    let win_single = Regex::new(r#"'(?i:[a-z]:\\[^'\n]+)'"#).unwrap();
+    let unix_double = Regex::new(r#"\"(?i:/(users|home|var|etc|opt|tmp)/[^\"\n]+)\""#).unwrap();
+    let unix_single = Regex::new(r#"'(?i:/(users|home|var|etc|opt|tmp)/[^'\n]+)'"#).unwrap();
+
+    let patterns = [win_double, win_single, unix_double, unix_single];
+
+    let mut updated = script_content.to_string();
+    let mut replacements = 0usize;
+
+    for regex in patterns {
+        let source = updated.clone();
+        updated = regex
+            .replace_all(&source, |caps: &regex::Captures| {
+                let full = caps.get(0).map(|m| m.as_str()).unwrap_or_default();
+                if full.len() < 2 {
+                    return full.to_string();
+                }
+
+                let inner = &full[1..full.len() - 1];
+                let Some(base) = extract_basename(inner) else {
+                    return full.to_string();
+                };
+
+                replacements += 1;
+                format!("str((Path(__file__).parent / {:?}).resolve())", base)
+            })
+            .to_string();
+    }
+
+    if replacements > 0 {
+        (ensure_pathlib_import(&updated), replacements)
+    } else {
+        (updated, 0)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct ScriptMetadata {
@@ -364,8 +492,10 @@ pub async fn replace_official_script_content(
         return Err(format!("Official script not found: {}", script_name));
     }
 
+    let (normalized_content, rewrites) = auto_rewrite_paths_to_script_dir(&script_content);
+    let portability_findings = detect_hardcoded_paths(&normalized_content);
     let was_encrypted = script_dir.join("main.py.enc").exists();
-    write_script_and_requirements(&script_dir, &script_content)?;
+    write_script_and_requirements(&script_dir, &normalized_content)?;
 
     let mut metadata = load_script_metadata(&script_dir, script_name);
     metadata.last_modified = Utc::now().to_rfc3339();
@@ -387,7 +517,21 @@ pub async fn replace_official_script_content(
     )
     .await?;
 
-    Ok(format!("Official script '{}' updated", script_name))
+    let rewrite_note = if rewrites > 0 {
+        format!(
+            "\n\n✅ Auto-poprawka: zamieniono {} hardcoded ścieżek na Path(__file__).parent.",
+            rewrites
+        )
+    } else {
+        String::new()
+    };
+
+    Ok(format!(
+        "Official script '{}' updated{}{}",
+        script_name,
+        rewrite_note,
+        format_portability_warning(&portability_findings)
+    ))
 }
 
 #[tauri::command]
@@ -431,9 +575,11 @@ pub async fn update_official_script_full(
         target_dir
     };
 
+    let (normalized_content, rewrites) = auto_rewrite_paths_to_script_dir(&script_content);
+    let portability_findings = detect_hardcoded_paths(&normalized_content);
     let was_encrypted = script_dir.join("main.py.enc").exists();
     let previous_metadata = load_script_metadata(&script_dir, &new_name);
-    write_script_and_requirements(&script_dir, &script_content)?;
+    write_script_and_requirements(&script_dir, &normalized_content)?;
 
     let now = Utc::now().to_rfc3339();
     let metadata = ScriptMetadata {
@@ -477,7 +623,21 @@ pub async fn update_official_script_full(
     )
     .await?;
 
-    Ok(format!("Official script '{}' saved", new_name))
+    let rewrite_note = if rewrites > 0 {
+        format!(
+            "\n\n✅ Auto-poprawka: zamieniono {} hardcoded ścieżek na Path(__file__).parent.",
+            rewrites
+        )
+    } else {
+        String::new()
+    };
+
+    Ok(format!(
+        "Official script '{}' saved{}{}",
+        new_name,
+        rewrite_note,
+        format_portability_warning(&portability_findings)
+    ))
 }
 
 fn normalize_unique_script_names(script_names: Vec<String>) -> Vec<String> {
@@ -751,9 +911,10 @@ fn is_stdlib_module(module: &str) -> bool {
 
 fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String> {
     // Git add
-    let add_output = Command::new("git")
-        .args(["add", "."])
-        .current_dir(scripts_path)
+    let mut add_cmd = Command::new("git");
+    add_cmd.args(["add", "."]).current_dir(scripts_path);
+    apply_no_console_window(&mut add_cmd);
+    let add_output = add_cmd
         .output()
         .map_err(|e| format!("Git add failed: {}", e))?;
 
@@ -765,9 +926,12 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
     }
 
     // Git commit
-    let commit_output = Command::new("git")
+    let mut commit_cmd = Command::new("git");
+    commit_cmd
         .args(["commit", "-m", &commit_msg])
-        .current_dir(scripts_path)
+        .current_dir(scripts_path);
+    apply_no_console_window(&mut commit_cmd);
+    let commit_output = commit_cmd
         .output()
         .map_err(|e| format!("Git commit failed: {}", e))?;
 
@@ -780,9 +944,10 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
     }
 
     // Git push
-    let push_output = Command::new("git")
-        .args(["push"])
-        .current_dir(scripts_path)
+    let mut push_cmd = Command::new("git");
+    push_cmd.args(["push"]).current_dir(scripts_path);
+    apply_no_console_window(&mut push_cmd);
+    let push_output = push_cmd
         .output()
         .map_err(|e| format!("Git push failed: {}", e))?;
 
@@ -849,16 +1014,24 @@ fn add_script_internal(
         scripts_path.join(subfolder).join(&script_name)
     };
 
+    let (normalized_content, rewrites, portability_findings) = if subfolder == "official" {
+        let (normalized, rewrite_count) = auto_rewrite_paths_to_script_dir(&script_content);
+        let findings = detect_hardcoded_paths(&normalized);
+        (normalized, rewrite_count, findings)
+    } else {
+        (script_content.clone(), 0, Vec::new())
+    };
+
     fs::create_dir_all(&script_dir)
         .map_err(|e| format!("Failed to create script directory: {}", e))?;
 
     // Save main.py
     let script_file = script_dir.join("main.py");
-    fs::write(&script_file, &script_content)
+    fs::write(&script_file, &normalized_content)
         .map_err(|e| format!("Failed to write script file: {}", e))?;
 
     // Analyze dependencies
-    let dependencies = analyze_dependencies(&script_content)?;
+    let dependencies = analyze_dependencies(&normalized_content)?;
 
     // Save requirements.txt
     if !dependencies.is_empty() {
@@ -888,5 +1061,19 @@ fn add_script_internal(
     let commit_msg = format!("Add script: {}", script_name);
     commit_and_push(scripts_path, commit_msg)?;
 
-    Ok(format!("Script '{}' added successfully!", script_name))
+    let rewrite_note = if rewrites > 0 {
+        format!(
+            "\n\n✅ Auto-poprawka: zamieniono {} hardcoded ścieżek na Path(__file__).parent.",
+            rewrites
+        )
+    } else {
+        String::new()
+    };
+
+    Ok(format!(
+        "Script '{}' added successfully!{}{}",
+        script_name,
+        rewrite_note,
+        format_portability_warning(&portability_findings)
+    ))
 }

@@ -6,39 +6,43 @@
 use chrono::TimeZone;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
 
-mod analytics;
-mod dependency_manager;
-mod git_manager;
-mod github_auth;
-mod kill_switch;
-mod kill_switch_manager;
-mod python_runner;
-mod run_history;
-mod script_encryption;
-mod script_manager;
-mod settings;
+#[cfg(target_os = "windows")]
+        let ps_script = format!(
+            r#"
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 
-#[derive(Clone)]
-pub struct AppState {
-    scripts_dir: PathBuf,
-    python_exec: PathBuf,
-}
+            $template = @"
+            <toast>
+                <visual>
+                    <binding template=\"ToastGeneric\">
+                        <text>{}</text>
+                        <text>{}</text>
+                    </binding>
+                </visual>
+            </toast>
+"@
 
-const DEFAULT_RELEASES_REPO: &str = "PatrykEmilLibert/script-runner";
-const DEFAULT_UPDATER_ENDPOINT: &str =
-    "https://github.com/PatrykEmilLibert/script-runner/releases/latest/download/latest.json";
-const COMPILED_RELEASES_REPO: Option<&str> = option_env!("SR_RELEASES_REPO");
-const COMPILED_UPDATER_ENDPOINT: Option<&str> = option_env!("SR_UPDATER_ENDPOINT");
-const COMPILED_UPDATER_PUBKEY: Option<&str> = option_env!("SR_UPDATER_PUBKEY");
+            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+            $xml.LoadXml($template)
+            $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("ScriptRunner").Show($toast)
+            "#,
+            title.replace('"', "\\\""),
+            body.replace('"', "\\\"")
+        );
 
-#[derive(Debug, serde::Serialize)]
-struct AvailableUpdateInfo {
-    version: String,
-    current_version: String,
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", &ps_script]);
+        apply_no_console_window(&mut cmd);
+
+        let output = cmd
     notes: Option<String>,
     pub_date: Option<String>,
     download_url: String,
@@ -49,6 +53,48 @@ fn read_non_empty_env(key: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn apply_no_console_window(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+fn resolve_script_directory(
+    scripts_root: &Path,
+    script_name: &str,
+    subdir: Option<&str>,
+) -> Result<PathBuf, String> {
+    let user_dir = script_manager::get_user_script_dir(scripts_root, script_name);
+    let official_dir = scripts_root.join("official").join(script_name);
+
+    match subdir {
+        Some("scripts") => {
+            if user_dir.exists() {
+                Ok(user_dir)
+            } else {
+                Err(format!("User script not found: {}", script_name))
+            }
+        }
+        Some("official") => {
+            if official_dir.exists() {
+                Ok(official_dir)
+            } else {
+                Err(format!("Official script not found: {}", script_name))
+            }
+        }
+        _ => {
+            if user_dir.exists() {
+                Ok(user_dir)
+            } else if official_dir.exists() {
+                Ok(official_dir)
+            } else {
+                Err(format!("Script not found: {}", script_name))
+            }
+        }
+    }
 }
 
 fn releases_repo() -> String {
@@ -187,10 +233,13 @@ async fn send_desktop_notification(
             [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 
-            $template = @"
-            <toast>
-                <visual>
-                    <binding template="ToastGeneric">
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-Command", &script]);
+        apply_no_console_window(&mut cmd);
+
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
                         <text>{}</text>
                         <text>{}</text>
                     </binding>
@@ -219,8 +268,6 @@ async fn send_desktop_notification(
 
     #[cfg(target_os = "macos")]
     {
-        use std::process::Command;
-
         let _ = Command::new("osascript")
             .args([
                 "-e",
@@ -236,8 +283,6 @@ async fn send_desktop_notification(
 
     #[cfg(target_os = "linux")]
     {
-        use std::process::Command;
-
         let _ = Command::new("notify-send")
             .args([&title, &body])
             .output()
@@ -477,21 +522,8 @@ async fn run_script(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let start_time = chrono::Utc::now();
-    // Prefer user script; fall back to official if user copy not found
-    let user_dir = script_manager::get_user_script_dir(&state.scripts_dir, &script_name);
+    let script_dir = resolve_script_directory(&state.scripts_dir, &script_name, None)?;
     let official_dir_path = state.scripts_dir.join("official").join(&script_name);
-
-    let script_dir = if user_dir.exists() {
-        log::info!("Using user script: {:?}", user_dir);
-        user_dir
-    } else if official_dir_path.exists() {
-        log::info!("Using official script: {:?}", official_dir_path);
-        official_dir_path.clone()
-    } else {
-        let err = format!("Script not found: {}", script_name);
-        log::error!("{}", err);
-        return Err(err);
-    };
 
     // Check for encrypted or plain script
     let main_enc = script_dir.join("main.py.enc");
@@ -732,6 +764,57 @@ fn get_scripts_dir(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn open_scripts_root_folder(state: State<'_, AppState>) -> Result<String, String> {
+    let path = state.scripts_dir.clone();
+    if !path.exists() {
+        std::fs::create_dir_all(&path)
+            .map_err(|e| format!("Failed to create scripts root directory: {}", e))?;
+    }
+
+    open_path_in_file_manager(&path)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn open_script_folder(
+    script_name: String,
+    subdir: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let script_dir = resolve_script_directory(&state.scripts_dir, &script_name, subdir.as_deref())?;
+    open_path_in_file_manager(&script_dir)?;
+    Ok(script_dir.to_string_lossy().to_string())
+}
+
+fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder in Explorer: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder in Finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder in file manager: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn get_app_instance_id() -> Result<String, String> {
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to resolve current executable path: {}", e))?;
@@ -919,6 +1002,8 @@ fn main() {
             get_settings,
             set_auto_update,
             get_scripts_dir,
+            open_scripts_root_folder,
+            open_script_folder,
             get_app_instance_id,
             encrypt_official_script,
             check_for_updates,

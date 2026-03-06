@@ -33,6 +33,7 @@ import {
   Sun as IconSun,
   Command as IconCommand,
   Sparkles as IconSparkles,
+  FolderOpen as IconFolderOpen,
   Github as IconGithub,
   Minus as IconWindowMinimize,
   Square as IconWindowMaximize,
@@ -347,6 +348,25 @@ export default function App() {
       }));
       setOutput(errorMsg);
       await sendNotification("Script Failed", `${scriptName} encountered an error`, 'error', { sound: false });
+    }
+  };
+
+  const openScriptFolder = async () => {
+    try {
+      if (selectedScript) {
+        const subdir = officialScripts.includes(selectedScript) ? "official" : "scripts";
+        const openedPath: string = await invoke("open_script_folder", {
+          scriptName: selectedScript,
+          subdir,
+        });
+        await sendNotification("Folder opened", openedPath, "info", { sound: false });
+        return;
+      }
+
+      const openedRoot: string = await invoke("open_scripts_root_folder");
+      await sendNotification("Scripts folder opened", openedRoot, "info", { sound: false });
+    } catch (error) {
+      setErrorMessage(`Failed to open folder: ${error}`);
     }
   };
 
@@ -759,13 +779,23 @@ export default function App() {
                     <div className="flex-1 md:max-w-md">
                       <SearchBox onSearch={setScriptSearch} />
                     </div>
-                    <Button
-                      onClick={() => setShowAddScript(true)}
-                      color="pink"
-                      leftSection={<IconSparkles size={16} />}
-                    >
-                      {t('scripts.addScript')}
-                    </Button>
+                    <Group gap="sm">
+                      <Button
+                        onClick={openScriptFolder}
+                        variant="light"
+                        color="pink"
+                        leftSection={<IconFolderOpen size={16} />}
+                      >
+                        Open Script Folder
+                      </Button>
+                      <Button
+                        onClick={() => setShowAddScript(true)}
+                        color="pink"
+                        leftSection={<IconSparkles size={16} />}
+                      >
+                        {t('scripts.addScript')}
+                      </Button>
+                    </Group>
                   </div>
 
                   <ScriptList
@@ -1102,6 +1132,15 @@ export default function App() {
                   <div className="flex-1 md:max-w-md">
                     <SearchBox onSearch={setScriptSearch} />
                   </div>
+                  <Group gap="sm">
+                    <Button
+                      onClick={openScriptFolder}
+                      variant="light"
+                      color="pink"
+                      leftSection={<IconFolderOpen size={16} />}
+                    >
+                      Open Script Folder
+                    </Button>
                   {isAdmin && (
                     <Button
                       onClick={() => setShowAddScript(true)}
@@ -1112,6 +1151,7 @@ export default function App() {
                       {t('scripts.addScript')}
                     </Button>
                   )}
+                  </Group>
                 </div>
 
                 {isAdmin && (

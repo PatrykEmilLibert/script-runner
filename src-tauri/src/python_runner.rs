@@ -3,6 +3,19 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn apply_no_console_window(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 // Map of Windows-specific imports to their descriptions
 fn get_windows_specific_imports() -> Vec<(&'static str, &'static str)> {
     vec![
@@ -115,6 +128,7 @@ pub async fn execute_script(
 
     let mut cmd = Command::new(python_exec);
     cmd.arg(&script_to_execute);
+    apply_no_console_window(&mut cmd);
     if let Some(script_dir) = script_path.parent() {
         cmd.current_dir(script_dir);
     }

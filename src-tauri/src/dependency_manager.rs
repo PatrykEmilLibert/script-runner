@@ -6,8 +6,21 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 use crate::script_encryption;
 use crate::script_manager;
+
+fn apply_no_console_window(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
 
 // Map import names to pip package names for packages with mismatched names
 // Based on common PyPI package name mismatches
@@ -156,6 +169,7 @@ fn run_pip_install(
     let mut cmd = Command::new(python_exec);
     cmd.args(["-m", "pip", "install"]);
     cmd.args(packages);
+    apply_no_console_window(&mut cmd);
 
     if let Some(dir) = current_dir {
         cmd.current_dir(dir);
