@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
@@ -95,12 +95,12 @@ export default function App() {
   const [showGitHubAuth, setShowGitHubAuth] = useState(false);
   const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("6.0.11");
+  const [appVersion, setAppVersion] = useState<string>("6.0.12");
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
-      .catch(() => setAppVersion("6.0.11"));
+      .catch(() => setAppVersion("6.0.12"));
   }, []);
 
   useEffect(() => {
@@ -321,7 +321,7 @@ export default function App() {
       try {
         const issues: string[] = await invoke("check_script_compatibility", { scriptName });
         if (issues.length > 0 && !window.confirm(
-          `⚠️ This script contains Windows-specific libraries:\n\n${issues.join("\n")}\n\nContinue anyway?`
+          `âš ď¸Ź This script contains Windows-specific libraries:\n\n${issues.join("\n")}\n\nContinue anyway?`
         )) {
           setRunningScripts(prev => ({
             ...prev,
@@ -543,7 +543,7 @@ export default function App() {
   };
 
   const deleteScript = async (script: string, folder: "scripts" | "official") => {
-    const confirmMsg = t('scripts.deleteConfirm', { defaultValue: `Na pewno usunąć ${script}?` });
+    const confirmMsg = t('scripts.deleteConfirm', { defaultValue: `Na pewno usunÄ…Ä‡ ${script}?` });
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -567,7 +567,7 @@ export default function App() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900 dark:bg-gray-950">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-4">⚠️ {t('messages.errorOccurred')}</h1>
+          <h1 className="text-4xl font-bold text-white mb-4">âš ď¸Ź {t('messages.errorOccurred')}</h1>
           <p className="text-gray-400">{t('app.title')}</p>
         </div>
       </div>
@@ -645,13 +645,13 @@ export default function App() {
             <IconSparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-pink-500 animate-pulse" size={24} />
           </div>
           <Text size="sm" c="dimmed" className="animate-pulse">{t('app.loading')}</Text>
-          <Text size="xs" c="pink" mt="xs">Initializing pink magic ✨</Text>
+          <Text size="xs" c="pink" mt="xs">Initializing pink magic âś¨</Text>
         </div>
       </div>
     );
   }
 
-  // Jeśli brak uprawnień admina GitHub - pokaż app w user mode
+  // JeĹ›li brak uprawnieĹ„ admina GitHub - pokaĹĽ app w user mode
   if (!isAdmin) {
     return (
       <AppShell
@@ -1304,8 +1304,8 @@ export default function App() {
           className="text-center py-4 mt-8 border-t border-pink-100 dark:border-gray-700"
         >
           <Text size="xs" c="dimmed">
-            Script Runner v{appVersion} • Made with{' '}
-            <span className="text-pink-500 animate-pulse">♥</span> and{' '}
+            Script Runner v{appVersion} â€˘ Made with{' '}
+            <span className="text-pink-500 animate-pulse">â™Ą</span> and{' '}
             <IconSparkles size={12} className="inline text-pink-500" />
           </Text>
         </Box>
@@ -1324,3 +1324,4 @@ export default function App() {
     </AppShell>
   );
 }
+
