@@ -121,7 +121,12 @@ pub async fn execute_script(
         == Some("enc")
     {
         use std::io::Write;
-        let temp_path = std::env::temp_dir().join(format!("sr_temp_{}.py", uuid::Uuid::new_v4()));
+        let temp_path = script_path
+            .parent()
+            .map(|dir| dir.join(format!(".sr_runtime_{}.py", uuid::Uuid::new_v4())))
+            .unwrap_or_else(|| {
+                std::env::temp_dir().join(format!("sr_temp_{}.py", uuid::Uuid::new_v4()))
+            });
         let mut file = std::fs::File::create(&temp_path)
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
         file.write_all(script_content.as_bytes())
