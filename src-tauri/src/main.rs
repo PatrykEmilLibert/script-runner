@@ -58,11 +58,9 @@ fn read_non_empty_env(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+#[cfg(target_os = "windows")]
 fn apply_no_console_window(cmd: &mut Command) {
-    #[cfg(target_os = "windows")]
-    {
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 fn resolve_script_directory(

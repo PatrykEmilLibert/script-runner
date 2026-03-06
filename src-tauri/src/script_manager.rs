@@ -1,4 +1,5 @@
 use chrono::Utc;
+use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository, Signature};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -12,10 +13,17 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+const COMPILED_SCRIPTS_PUSH_TOKEN: Option<&str> = option_env!("SR_SCRIPTS_PUSH_TOKEN");
+
 fn apply_no_console_window(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = cmd;
     }
 }
 
@@ -910,6 +918,30 @@ fn is_stdlib_module(module: &str) -> bool {
 }
 
 fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String> {
+    match commit_and_push_via_cli(scripts_path, &commit_msg) {
+        Ok(()) => Ok(()),
+        Err(cli_error) => {
+            log::warn!(
+                "Git CLI commit/push failed, trying libgit2 fallback: {}",
+                cli_error
+            );
+
+            match commit_and_push_via_libgit2(scripts_path, &commit_msg) {
+                Ok(()) => Ok(()),
+                Err(libgit2_error) => {
+                    log::warn!(
+                        "Push skipped. Changes saved locally only. Git CLI error: {}. libgit2 error: {}",
+                        cli_error,
+                        libgit2_error
+                    );
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+fn commit_and_push_via_cli(scripts_path: &Path, commit_msg: &str) -> Result<(), String> {
     // Git add
     let mut add_cmd = Command::new("git");
     add_cmd.args(["add", "."]).current_dir(scripts_path);
@@ -928,7 +960,7 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
     // Git commit
     let mut commit_cmd = Command::new("git");
     commit_cmd
-        .args(["commit", "-m", &commit_msg])
+        .args(["commit", "-m", commit_msg])
         .current_dir(scripts_path);
     apply_no_console_window(&mut commit_cmd);
     let commit_output = commit_cmd
@@ -957,6 +989,126 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
             String::from_utf8_lossy(&push_output.stderr)
         ));
     }
+
+    Ok(())
+}
+
+fn default_git_signature() -> Result<Signature<'static>, String> {
+    if let Ok(Some(session)) = crate::github_auth::get_current_session() {
+        let name = if session.user.login.trim().is_empty() {
+            "script-runner".to_string()
+        } else {
+            session.user.login.clone()
+        };
+        let email = format!("{}@users.noreply.github.com", name);
+        return Signature::now(&name, &email)
+            .map_err(|e| format!("Failed to create git signature: {}", e));
+    }
+
+    Signature::now("script-runner", "script-runner@local")
+        .map_err(|e| format!("Failed to create fallback git signature: {}", e))
+}
+
+fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<(), String> {
+    let repo = Repository::open(scripts_path)
+        .map_err(|e| format!("Failed to open repository with libgit2: {}", e))?;
+
+    let mut index = repo
+        .index()
+        .map_err(|e| format!("Failed to open git index: {}", e))?;
+    index
+        .add_all(["*"], IndexAddOption::DEFAULT, None)
+        .map_err(|e| format!("Failed to stage changes: {}", e))?;
+    index
+        .write()
+        .map_err(|e| format!("Failed to write git index: {}", e))?;
+
+    let statuses = repo
+        .statuses(None)
+        .map_err(|e| format!("Failed to read git status: {}", e))?;
+
+    if !statuses.is_empty() {
+        let tree_id = index
+            .write_tree()
+            .map_err(|e| format!("Failed to write git tree: {}", e))?;
+        let tree = repo
+            .find_tree(tree_id)
+            .map_err(|e| format!("Failed to find git tree: {}", e))?;
+
+        let signature = repo.signature().or_else(|_| default_git_signature())?;
+
+        if let Ok(head) = repo.head() {
+            if let Some(parent_oid) = head.target() {
+                let parent = repo
+                    .find_commit(parent_oid)
+                    .map_err(|e| format!("Failed to find parent commit: {}", e))?;
+                repo.commit(
+                    Some("HEAD"),
+                    &signature,
+                    &signature,
+                    commit_msg,
+                    &tree,
+                    &[&parent],
+                )
+                .map_err(|e| format!("Failed to create commit: {}", e))?;
+            } else {
+                repo.commit(Some("HEAD"), &signature, &signature, commit_msg, &tree, &[])
+                    .map_err(|e| format!("Failed to create initial commit: {}", e))?;
+            }
+        } else {
+            repo.commit(Some("HEAD"), &signature, &signature, commit_msg, &tree, &[])
+                .map_err(|e| format!("Failed to create initial commit: {}", e))?;
+        }
+    }
+
+    let mut callbacks = RemoteCallbacks::new();
+
+    let token = crate::github_auth::get_current_session()
+        .ok()
+        .flatten()
+        .map(|session| session.token)
+        .or_else(|| {
+            std::env::var("SR_SCRIPTS_PUSH_TOKEN")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| {
+            COMPILED_SCRIPTS_PUSH_TOKEN
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return Err(
+            "Git CLI unavailable and no GitHub session token found. Log in to GitHub in the app."
+                .to_string(),
+        );
+    }
+
+    callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+        Cred::userpass_plaintext(username_from_url.unwrap_or("x-access-token"), &token)
+    });
+
+    let mut push_options = PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+
+    let branch = repo
+        .head()
+        .ok()
+        .and_then(|head| head.shorthand().map(|s| s.to_string()))
+        .unwrap_or_else(|| "main".to_string());
+
+    let refspec = format!("refs/heads/{0}:refs/heads/{0}", branch);
+
+    let mut remote = repo
+        .find_remote("origin")
+        .map_err(|e| format!("Failed to find remote origin: {}", e))?;
+
+    remote
+        .push(&[&refspec], Some(&mut push_options))
+        .map_err(|e| format!("Failed to push via libgit2: {}", e))?;
 
     Ok(())
 }

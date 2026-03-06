@@ -20,6 +20,11 @@ fn apply_no_console_window(cmd: &mut Command) {
     {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = cmd;
+    }
 }
 
 // Map import names to pip package names for packages with mismatched names
