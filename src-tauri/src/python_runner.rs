@@ -115,6 +115,9 @@ pub async fn execute_script(
 
     let mut cmd = Command::new(python_exec);
     cmd.arg(&script_to_execute);
+    if let Some(script_dir) = script_path.parent() {
+        cmd.current_dir(script_dir);
+    }
 
     // Add script arguments if provided
     if let Some(script_args) = args {

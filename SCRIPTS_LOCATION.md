@@ -4,7 +4,13 @@ Scripts are stored in the user data directory and synchronized from remote GitHu
 
 ## Script Storage Location
 
-When running the app (`dev` and built), scripts are stored in:
+When running the app (`dev` and built), scripts are stored in this order:
+
+1. `SR_SCRIPTS_DIR` (if set and writable)
+2. Install-adjacent folder: `<app_folder>/ScriptRunnerData/scripts` (if writable)
+3. User data fallback (`AppData/Roaming` on Windows)
+
+Default fallback locations:
 
 ### Windows
 ```

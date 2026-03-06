@@ -5,6 +5,7 @@
 
 use chrono::TimeZone;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
@@ -248,19 +249,81 @@ async fn send_desktop_notification(
 
 fn resolve_scripts_dir() -> PathBuf {
     if let Ok(custom) = env::var("SR_SCRIPTS_DIR") {
-        return PathBuf::from(custom);
+        let custom_path = PathBuf::from(custom);
+        if is_directory_writable(&custom_path) {
+            log::info!("Using SR_SCRIPTS_DIR for scripts: {:?}", custom_path);
+            return custom_path;
+        }
+
+        log::warn!(
+            "SR_SCRIPTS_DIR is not writable, ignoring custom path: {:?}",
+            custom_path
+        );
+    }
+
+    if let Some(install_adjacent) = resolve_install_adjacent_scripts_dir() {
+        if is_directory_writable(&install_adjacent) {
+            log::info!(
+                "Using install-adjacent directory for scripts: {:?}",
+                install_adjacent
+            );
+            return install_adjacent;
+        }
+
+        log::warn!(
+            "Install-adjacent scripts path is not writable: {:?}",
+            install_adjacent
+        );
     }
 
     // Use user data directory (persistent across updates)
     if let Some(data_dir) = dirs::data_dir() {
         let app_data = data_dir.join("ScriptRunner").join("scripts");
-        log::info!("Using user data directory for scripts: {:?}", app_data);
-        return app_data;
+        if is_directory_writable(&app_data) {
+            log::info!("Using user data directory for scripts: {:?}", app_data);
+            return app_data;
+        }
+
+        log::warn!(
+            "User data scripts directory is not writable, skipping: {:?}",
+            app_data
+        );
     }
 
     // Final fallback (should rarely happen)
-    log::warn!("Could not determine data directory, using local ./scripts path");
-    PathBuf::from("./scripts")
+    let local_fallback = PathBuf::from("./scripts");
+    log::warn!(
+        "Falling back to local scripts path (writability not guaranteed): {:?}",
+        local_fallback
+    );
+    local_fallback
+}
+
+fn resolve_install_adjacent_scripts_dir() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|p| p.to_path_buf()))?;
+
+    Some(exe_dir.join("ScriptRunnerData").join("scripts"))
+}
+
+fn is_directory_writable(path: &PathBuf) -> bool {
+    if let Err(e) = fs::create_dir_all(path) {
+        log::warn!("Failed to create scripts directory {:?}: {}", path, e);
+        return false;
+    }
+
+    let probe = path.join(".sr_write_test");
+    match fs::write(&probe, b"ok") {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(e) => {
+            log::warn!("Scripts directory is not writable {:?}: {}", path, e);
+            false
+        }
+    }
 }
 
 fn resolve_python_exec() -> PathBuf {

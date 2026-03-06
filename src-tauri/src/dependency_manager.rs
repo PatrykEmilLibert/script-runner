@@ -136,12 +136,112 @@ fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
     map.insert("six", "six");
     map.insert("future", "future");
 
+    // Windows-specific modules provided by pywin32
+    map.insert("pythoncom", "pywin32");
+    map.insert("pywintypes", "pywin32");
+    map.insert("win32api", "pywin32");
+    map.insert("win32con", "pywin32");
+    map.insert("win32gui", "pywin32");
+    map.insert("win32process", "pywin32");
+    map.insert("win32com", "pywin32");
+
     map
+}
+
+fn run_pip_install(
+    python_exec: &PathBuf,
+    packages: &[String],
+    current_dir: Option<&PathBuf>,
+) -> Result<std::process::Output, String> {
+    let mut cmd = Command::new(python_exec);
+    cmd.args(["-m", "pip", "install"]);
+    cmd.args(packages);
+
+    if let Some(dir) = current_dir {
+        cmd.current_dir(dir);
+    }
+
+    cmd.output()
+        .map_err(|e| format!("Failed to run pip: {}", e))
+}
+
+fn extract_unavailable_packages(stderr: &str) -> HashSet<String> {
+    let mut unavailable = HashSet::new();
+
+    let could_not_find = Regex::new(
+        r"Could not find a version that satisfies the requirement\s+([^\s\(]+)",
+    )
+    .unwrap();
+    for caps in could_not_find.captures_iter(stderr) {
+        if let Some(pkg) = caps.get(1) {
+            unavailable.insert(pkg.as_str().trim().to_string());
+        }
+    }
+
+    let no_matching = Regex::new(r"No matching distribution found for\s+([^\s]+)").unwrap();
+    for caps in no_matching.captures_iter(stderr) {
+        if let Some(pkg) = caps.get(1) {
+            unavailable.insert(pkg.as_str().trim().to_string());
+        }
+    }
+
+    unavailable
+}
+
+fn install_packages_resilient(
+    python_exec: &PathBuf,
+    packages: &[String],
+    current_dir: Option<&PathBuf>,
+) -> Result<(), String> {
+    if packages.is_empty() {
+        return Ok(());
+    }
+
+    let output = run_pip_install(python_exec, packages, current_dir)?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let unavailable = extract_unavailable_packages(&stderr);
+
+    if unavailable.is_empty() {
+        return Err(format!("{}\n{}", stdout, stderr));
+    }
+
+    let filtered: Vec<String> = packages
+        .iter()
+        .filter(|pkg| !unavailable.contains(pkg.as_str()))
+        .cloned()
+        .collect();
+
+    if filtered.is_empty() {
+        return Err(format!("{}\n{}", stdout, stderr));
+    }
+
+    let retry_output = run_pip_install(python_exec, &filtered, current_dir)?;
+    if retry_output.status.success() {
+        log::warn!(
+            "Skipped non-installable packages: {:?}. Installed remaining packages: {:?}",
+            unavailable,
+            filtered
+        );
+        return Ok(());
+    }
+
+    let retry_stderr = String::from_utf8_lossy(&retry_output.stderr);
+    let retry_stdout = String::from_utf8_lossy(&retry_output.stdout);
+    Err(format!(
+        "Skipped non-installable packages: {:?}\n\nRetry with remaining packages failed:\n{}\n{}",
+        unavailable, retry_stdout, retry_stderr
+    ))
 }
 
 const STDLIB_MODULES: &[&str] = &[
     "sys",
     "os",
+    "base64",
     "json",
     "re",
     "math",
@@ -185,6 +285,8 @@ const STDLIB_MODULES: &[&str] = &[
     "ast",
     "symtable",
     "typing",
+    "dataclasses",
+    "enum",
     "pydoc",
     "argparse",
     "getopt",
@@ -386,16 +488,9 @@ pub async fn ensure_requirements(
 
     log::info!("Installing packages: {:?}", packages);
 
-    let output = Command::new(python_exec)
-        .args(["-m", "pip", "install"])
-        .args(&packages)
-        .current_dir(script_dir)
-        .output()
-        .map_err(|e| format!("Failed to run pip: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Err(raw_error) = install_packages_resilient(python_exec, &packages, Some(script_dir)) {
+        let stderr = raw_error.as_str();
+        let stdout = "";
 
         // Parse pip error for better diagnostics
         let mut error_msg = format!("❌ Failed to install packages: {}\n", packages.join(", "));
@@ -559,15 +654,9 @@ pub async fn ensure_all_scripts_requirements(
         }
     }
 
-    let output = Command::new(python_exec)
-        .args(["-m", "pip", "install"])
-        .args(&combined)
-        .output()
-        .map_err(|e| format!("Failed to run pip: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Err(raw_error) = install_packages_resilient(python_exec, &combined, None) {
+        let stderr = raw_error.as_str();
+        let stdout = "";
 
         let mut error_msg = format!("❌ Failed to install {} packages\n", combined.len());
 
@@ -627,15 +716,8 @@ pub async fn install_dependencies(
         })
         .collect();
 
-    let output = Command::new(python_exec)
-        .args(["-m", "pip", "install"])
-        .args(&mapped_packages)
-        .output()
-        .map_err(|e| format!("Failed to run pip: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Pip install failed: {}", stderr));
+    if let Err(raw_error) = install_packages_resilient(python_exec, &mapped_packages, None) {
+        return Err(format!("Pip install failed: {}", raw_error));
     }
 
     Ok(())
