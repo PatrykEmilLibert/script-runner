@@ -117,24 +117,23 @@ pub async fn execute_script(
     }
 
     // For encrypted scripts: write to temp file, execute, then delete
-    let (temp_file, script_to_execute) = if script_path.extension().and_then(|s| s.to_str())
-        == Some("enc")
-    {
-        use std::io::Write;
-        let temp_path = script_path
-            .parent()
-            .map(|dir| dir.join(format!(".sr_runtime_{}.py", uuid::Uuid::new_v4())))
-            .unwrap_or_else(|| {
-                std::env::temp_dir().join(format!("sr_temp_{}.py", uuid::Uuid::new_v4()))
-            });
-        let mut file = std::fs::File::create(&temp_path)
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
-        file.write_all(script_content.as_bytes())
-            .map_err(|e| format!("Failed to write temp file: {}", e))?;
-        (Some(temp_path.clone()), temp_path)
-    } else {
-        (None, script_path.clone())
-    };
+    let (temp_file, script_to_execute) =
+        if script_path.extension().and_then(|s| s.to_str()) == Some("enc") {
+            use std::io::Write;
+            let temp_path = script_path
+                .parent()
+                .map(|dir| dir.join(format!(".sr_runtime_{}.py", uuid::Uuid::new_v4())))
+                .unwrap_or_else(|| {
+                    std::env::temp_dir().join(format!("sr_temp_{}.py", uuid::Uuid::new_v4()))
+                });
+            let mut file = std::fs::File::create(&temp_path)
+                .map_err(|e| format!("Failed to create temp file: {}", e))?;
+            file.write_all(script_content.as_bytes())
+                .map_err(|e| format!("Failed to write temp file: {}", e))?;
+            (Some(temp_path.clone()), temp_path)
+        } else {
+            (None, script_path.clone())
+        };
 
     let mut cmd = Command::new(python_exec);
     cmd.arg(&script_to_execute);
