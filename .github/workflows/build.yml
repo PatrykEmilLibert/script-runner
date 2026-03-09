@@ -55,40 +55,24 @@ jobs:
             Write-Host "Windows code signing secrets detected. Authenticode signing will be applied."
           }
 
-      - name: Build portable bundled Python runtime (Windows)
+      - name: Build bundled full Python runtime (Windows)
         run: |
           if (Test-Path src-tauri\python) {
             Remove-Item -Recurse -Force src-tauri\python
           }
 
-          $pythonVersion = "3.12.9"
-          $pythonTag = "312"
-          $embedZip = "python-$pythonVersion-embed-amd64.zip"
-          $embedUrl = "https://www.python.org/ftp/python/$pythonVersion/$embedZip"
-          $embedPath = Join-Path $env:RUNNER_TEMP $embedZip
-
-          Invoke-WebRequest -Uri $embedUrl -OutFile $embedPath
-          Expand-Archive -Path $embedPath -DestinationPath "src-tauri\python" -Force
-
-          $pthPath = "src-tauri\python\python$pythonTag._pth"
-          if (-not (Test-Path $pthPath)) {
-            throw "Missing embedded Python ._pth file: $pthPath"
+          $pythonRoot = (& python -c "import pathlib,sys; print(pathlib.Path(sys.executable).resolve().parent.parent)").Trim()
+          if (-not $pythonRoot) {
+            throw "Failed to resolve Python root from setup-python"
+          }
+          if (-not (Test-Path (Join-Path $pythonRoot "python.exe"))) {
+            throw "setup-python root does not contain python.exe: $pythonRoot"
           }
 
-          $pthContent = Get-Content $pthPath
-          $pthContent = $pthContent | ForEach-Object {
-            if ($_ -match '^#import site$') { 'import site' }
-            elseif ($_ -eq 'import site') { 'import site' }
-            else { $_ }
-          }
-          Set-Content -Path $pthPath -Value $pthContent -Encoding ascii
-
-          $getPipPath = Join-Path $env:RUNNER_TEMP "get-pip.py"
-          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath
-
-          & "src-tauri\python\python.exe" $getPipPath --no-warn-script-location
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to bootstrap pip in embedded Python"
+          New-Item -ItemType Directory -Path "src-tauri\python" -Force | Out-Null
+          robocopy "$pythonRoot" "src-tauri\python" /E /NFL /NDL /NJH /NJS /NP /R:2 /W:2
+          if ($LASTEXITCODE -gt 7) {
+            throw "Failed to copy full Python runtime from $pythonRoot to src-tauri\\python"
           }
 
           & "src-tauri\python\python.exe" -m pip install --upgrade --force-reinstall pip setuptools wheel
@@ -108,6 +92,10 @@ jobs:
 
           if (-not (Test-Path "src-tauri\python\Lib\site-packages\pip")) {
             throw "pip package not found in bundled runtime: src-tauri\\python\\Lib\\site-packages\\pip"
+          }
+
+          if (-not (Test-Path "src-tauri\python\Lib\encodings")) {
+            throw "Python stdlib appears incomplete: missing src-tauri\\python\\Lib\\encodings"
           }
 
       - name: Verify bundled Python paths (Windows)
