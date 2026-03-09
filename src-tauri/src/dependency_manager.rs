@@ -203,10 +203,7 @@ fn run_python_command(
         .map_err(|e| format!("Failed to run Python command: {}", e))
 }
 
-fn is_pip_available(
-    python_exec: &PathBuf,
-    current_dir: Option<&PathBuf>,
-) -> Result<bool, String> {
+fn is_pip_available(python_exec: &PathBuf, current_dir: Option<&PathBuf>) -> Result<bool, String> {
     let output = run_python_command(python_exec, &["-m", "pip", "--version"], current_dir)?;
     Ok(output.status.success())
 }
@@ -224,13 +221,13 @@ fn ensure_pip_available(
         python_exec.display()
     );
 
-    let ensurepip = run_python_command(
-        python_exec,
-        &["-m", "ensurepip", "--upgrade"],
-        current_dir,
-    )?;
+    let ensurepip =
+        run_python_command(python_exec, &["-m", "ensurepip", "--upgrade"], current_dir)?;
     if ensurepip.status.success() && is_pip_available(python_exec, current_dir)? {
-        log::info!("Bootstrapped pip using ensurepip for {}", python_exec.display());
+        log::info!(
+            "Bootstrapped pip using ensurepip for {}",
+            python_exec.display()
+        );
         return Ok(());
     }
 
@@ -242,7 +239,10 @@ subprocess.check_call([sys.executable, str(dest), '--no-warn-script-location'])"
 
     let get_pip = run_python_command(python_exec, &["-c", bootstrap_code], current_dir)?;
     if get_pip.status.success() && is_pip_available(python_exec, current_dir)? {
-        log::info!("Bootstrapped pip using get-pip.py for {}", python_exec.display());
+        log::info!(
+            "Bootstrapped pip using get-pip.py for {}",
+            python_exec.display()
+        );
         return Ok(());
     }
 
