@@ -1,5 +1,6 @@
 use regex::Regex;
 use std::collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet};
+use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -463,14 +464,20 @@ fn is_stdlib(module: &str) -> bool {
     STDLIB_MODULES.contains(&package)
 }
 
-fn filter_stdlib_from_requirements(content: &str) -> Vec<String> {
+fn force_install_all_requirements() -> bool {
+    env::var("SR_FORCE_INSTALL_ALL_REQUIREMENTS")
+        .map(|v| v != "0")
+        .unwrap_or(false)
+}
+
+fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> {
     let import_map = get_import_to_package_map();
 
     content
         .lines()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter(|line| !is_stdlib(line))
+        .filter(|line| include_stdlib || !is_stdlib(line))
         .map(|s| {
             // Extract package name (without version specifiers)
             let package = s
@@ -570,10 +577,11 @@ pub async fn ensure_requirements(
     let content = fs::read_to_string(&req_path)
         .map_err(|e| format!("Failed to read requirements.txt: {}", e))?;
 
-    let packages = filter_stdlib_from_requirements(&content);
+    let include_stdlib = force_install_all_requirements();
+    let packages = requirements_to_packages(&content, include_stdlib);
 
     if packages.is_empty() {
-        log::info!("No non-stdlib packages to install in {:?}", script_dir);
+        log::info!("No packages to install from requirements in {:?}", script_dir);
         return Ok(());
     }
 
@@ -660,8 +668,8 @@ pub async fn ensure_all_scripts_requirements(
         if req_path.exists() {
             match fs::read_to_string(&req_path) {
                 Ok(content) => {
-                    // Filter out stdlib modules from requirements
-                    for package in filter_stdlib_from_requirements(&content) {
+                    let include_stdlib = force_install_all_requirements();
+                    for package in requirements_to_packages(&content, include_stdlib) {
                         aggregated.insert(package);
                     }
                 }
