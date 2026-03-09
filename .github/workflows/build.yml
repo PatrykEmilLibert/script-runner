@@ -65,13 +65,36 @@ jobs:
           $pythonInstaller = "python-$pythonVersion-amd64.exe"
           $pythonInstallerUrl = "https://www.python.org/ftp/python/$pythonVersion/$pythonInstaller"
           $pythonInstallerPath = Join-Path $env:RUNNER_TEMP $pythonInstaller
+          $pythonTargetDir = Join-Path $PWD "src-tauri\python"
+          $pythonInstallLog = Join-Path $env:RUNNER_TEMP "python-install.log"
 
           Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath
 
-          New-Item -ItemType Directory -Path "src-tauri\python" -Force | Out-Null
+          New-Item -ItemType Directory -Path $pythonTargetDir -Force | Out-Null
 
-          & $pythonInstallerPath /quiet InstallAllUsers=0 TargetDir="$PWD\src-tauri\python" Include_pip=1 Include_tcltk=1 Include_test=0 Include_dev=0 Include_doc=0 PrependPath=0 AssociateFiles=0 CompileAll=0 SimpleInstall=1
-          if ($LASTEXITCODE -ne 0) {
+          $installerArgs = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=$pythonTargetDir",
+            "Include_pip=1",
+            "Include_tcltk=1",
+            "Include_test=0",
+            "Include_dev=0",
+            "Include_doc=0",
+            "PrependPath=0",
+            "AssociateFiles=0",
+            "CompileAll=0",
+            "/log",
+            "$pythonInstallLog"
+          )
+
+          $installProcess = Start-Process -FilePath $pythonInstallerPath -ArgumentList $installerArgs -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) {
+            if (Test-Path $pythonInstallLog) {
+              Write-Host "---- Python installer log ----"
+              Get-Content $pythonInstallLog | Select-Object -Last 200 | ForEach-Object { Write-Host $_ }
+              Write-Host "---- End installer log ----"
+            }
             throw "Failed to install full Python runtime from python.org installer"
           }
 
