@@ -416,12 +416,7 @@ fn resolve_python_exec() -> PathBuf {
             if let Some(exe_dir) = exe.parent() {
                 candidates.push(exe_dir.join("python").join("python.exe"));
                 candidates.push(exe_dir.join("python").join("Scripts").join("python.exe"));
-                candidates.push(
-                    exe_dir
-                        .join("resources")
-                        .join("python")
-                        .join("python.exe"),
-                );
+                candidates.push(exe_dir.join("resources").join("python").join("python.exe"));
                 candidates.push(
                     exe_dir
                         .join("resources")
