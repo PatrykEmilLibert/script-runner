@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
+
+#[cfg(target_os = "windows")]
 use walkdir::WalkDir;
 
 #[cfg(target_os = "windows")]
@@ -370,6 +372,7 @@ fn is_directory_writable(path: &PathBuf) -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn is_path_writable(path: &Path) -> bool {
     if let Err(e) = fs::create_dir_all(path) {
         log::warn!("Failed to create directory {:?}: {}", path, e);
@@ -389,6 +392,7 @@ fn is_path_writable(path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn infer_python_runtime_root(python_exec: &Path) -> Option<PathBuf> {
     let parent = python_exec.parent()?;
     if parent
@@ -403,6 +407,7 @@ fn infer_python_runtime_root(python_exec: &Path) -> Option<PathBuf> {
     Some(parent.to_path_buf())
 }
 
+#[cfg(target_os = "windows")]
 fn copy_directory_recursive(source: &Path, target: &Path) -> Result<(), String> {
     for entry in WalkDir::new(source).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
