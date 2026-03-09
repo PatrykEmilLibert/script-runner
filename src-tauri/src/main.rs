@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
+use walkdir::WalkDir;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -369,6 +370,136 @@ fn is_directory_writable(path: &PathBuf) -> bool {
     }
 }
 
+fn is_path_writable(path: &Path) -> bool {
+    if let Err(e) = fs::create_dir_all(path) {
+        log::warn!("Failed to create directory {:?}: {}", path, e);
+        return false;
+    }
+
+    let probe = path.join(".sr_write_test");
+    match fs::write(&probe, b"ok") {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(e) => {
+            log::warn!("Directory is not writable {:?}: {}", path, e);
+            false
+        }
+    }
+}
+
+fn infer_python_runtime_root(python_exec: &Path) -> Option<PathBuf> {
+    let parent = python_exec.parent()?;
+    if parent
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.eq_ignore_ascii_case("Scripts"))
+        .unwrap_or(false)
+    {
+        return parent.parent().map(|p| p.to_path_buf());
+    }
+
+    Some(parent.to_path_buf())
+}
+
+fn copy_directory_recursive(source: &Path, target: &Path) -> Result<(), String> {
+    for entry in WalkDir::new(source).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(source)
+            .map_err(|e| format!("Failed to resolve relative path during copy: {}", e))?;
+        let destination = target.join(relative);
+
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&destination)
+                .map_err(|e| format!("Failed to create directory {:?}: {}", destination, e))?;
+        } else {
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    format!("Failed to create parent directory {:?}: {}", parent, e)
+                })?;
+            }
+            fs::copy(path, &destination).map_err(|e| {
+                format!(
+                    "Failed to copy file from {:?} to {:?}: {}",
+                    path, destination, e
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_writable_python_exec(candidate: &PathBuf) -> PathBuf {
+    let Some(runtime_root) = infer_python_runtime_root(candidate) else {
+        return candidate.clone();
+    };
+
+    if is_path_writable(&runtime_root) {
+        return candidate.clone();
+    }
+
+    let data_root = dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("ScriptRunner")
+        .join("python-runtime")
+        .join(env!("CARGO_PKG_VERSION"));
+
+    let relative_exec = match candidate.strip_prefix(&runtime_root) {
+        Ok(relative) => relative.to_path_buf(),
+        Err(_) => PathBuf::from("python.exe"),
+    };
+
+    let writable_exec = data_root.join(&relative_exec);
+
+    if writable_exec.exists() && is_python_exec_usable(&writable_exec) {
+        log::info!(
+            "Using writable per-user Python runtime: {}",
+            writable_exec.display()
+        );
+        return writable_exec;
+    }
+
+    log::warn!(
+        "Bundled Python runtime is read-only at {}. Copying runtime to {}",
+        runtime_root.display(),
+        data_root.display()
+    );
+
+    if data_root.exists() {
+        let _ = fs::remove_dir_all(&data_root);
+    }
+
+    match copy_directory_recursive(&runtime_root, &data_root) {
+        Ok(_) => {
+            if is_python_exec_usable(&writable_exec) {
+                log::info!(
+                    "Using copied writable Python runtime: {}",
+                    writable_exec.display()
+                );
+                writable_exec
+            } else {
+                log::warn!(
+                    "Copied Python runtime is not usable, falling back to original runtime: {}",
+                    candidate.display()
+                );
+                candidate.clone()
+            }
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to prepare writable Python runtime copy: {}. Falling back to {}",
+                e,
+                candidate.display()
+            );
+            candidate.clone()
+        }
+    }
+}
+
 fn is_python_exec_usable(candidate: &PathBuf) -> bool {
     let mut cmd = Command::new(candidate);
     cmd.arg("--version");
@@ -449,8 +580,18 @@ fn resolve_python_exec() -> PathBuf {
 
     for candidate in candidates {
         if candidate.exists() && is_python_exec_usable(&candidate) {
-            log::info!("Using bundled Python runtime: {}", candidate.display());
-            return candidate;
+            #[cfg(target_os = "windows")]
+            {
+                let selected = resolve_writable_python_exec(&candidate);
+                log::info!("Using bundled Python runtime: {}", selected.display());
+                return selected;
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                log::info!("Using bundled Python runtime: {}", candidate.display());
+                return candidate;
+            }
         }
     }
 
