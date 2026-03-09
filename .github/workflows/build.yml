@@ -61,20 +61,22 @@ jobs:
             Remove-Item -Recurse -Force src-tauri\python
           }
 
-          $pythonExe = (& python -c "import pathlib,sys; print(pathlib.Path(sys.executable).resolve())").Trim()
-          if (-not $pythonExe) {
-            throw "Failed to resolve Python executable from setup-python"
-          }
+          $pythonVersion = "3.12.9"
+          $pythonInstaller = "python-$pythonVersion-amd64.exe"
+          $pythonInstallerUrl = "https://www.python.org/ftp/python/$pythonVersion/$pythonInstaller"
+          $pythonInstallerPath = Join-Path $env:RUNNER_TEMP $pythonInstaller
 
-          $pythonRoot = Split-Path -Parent $pythonExe
-          if (-not (Test-Path (Join-Path $pythonRoot "python.exe"))) {
-            throw "setup-python directory does not contain python.exe: $pythonRoot"
-          }
+          Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath
 
           New-Item -ItemType Directory -Path "src-tauri\python" -Force | Out-Null
-          robocopy "$pythonRoot" "src-tauri\python" /E /NFL /NDL /NJH /NJS /NP /R:2 /W:2
-          if ($LASTEXITCODE -gt 7) {
-            throw "Failed to copy full Python runtime from $pythonRoot to src-tauri\\python"
+
+          & $pythonInstallerPath /quiet InstallAllUsers=0 TargetDir="$PWD\src-tauri\python" Include_pip=1 Include_tcltk=1 Include_test=0 Include_dev=0 Include_doc=0 PrependPath=0 AssociateFiles=0 CompileAll=0 SimpleInstall=1
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install full Python runtime from python.org installer"
+          }
+
+          if (-not (Test-Path "src-tauri\python\python.exe")) {
+            throw "Installed Python runtime is missing python.exe in src-tauri\\python"
           }
 
           & "src-tauri\python\python.exe" -m pip install --upgrade --force-reinstall pip setuptools wheel
@@ -92,6 +94,11 @@ jobs:
             throw "pip import verification failed in bundled Python"
           }
 
+          & "src-tauri\python\python.exe" -c "import tkinter; print('tkinter=ok')"
+          if ($LASTEXITCODE -ne 0) {
+            throw "tkinter import verification failed in bundled Python"
+          }
+
           if (-not (Test-Path "src-tauri\python\Lib\site-packages\pip")) {
             throw "pip package not found in bundled runtime: src-tauri\\python\\Lib\\site-packages\\pip"
           }
@@ -107,6 +114,7 @@ jobs:
           }
           & "src-tauri\python\python.exe" --version
           & "src-tauri\python\python.exe" -m pip --version
+          & "src-tauri\python\python.exe" -c "import tkinter; print(tkinter.TkVersion)"
 
       - name: Install dependencies
         run: npm install
