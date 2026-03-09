@@ -14,6 +14,9 @@ chmod +x build.sh
 ./build.sh
 ```
 
+Release builds create Python runtime in `src-tauri/python` and bundle it into app resources.
+Deployment target is pinned to macOS 11.0 for better compatibility with older supported systems.
+
 Unsigned builds can run locally, but downloaded artifacts may be blocked by Gatekeeper.
 
 ## CI/Release Build (signed + notarized)

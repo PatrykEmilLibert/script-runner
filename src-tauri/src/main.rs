@@ -373,25 +373,64 @@ fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
     }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
     #[cfg(target_os = "windows")]
     {
-        let bundled = PathBuf::from("./python/Scripts/python.exe");
-        if bundled.exists() {
-            return bundled;
+        candidates.push(PathBuf::from("./python/Scripts/python.exe"));
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                candidates.push(exe_dir.join("python").join("Scripts").join("python.exe"));
+                candidates.push(
+                    exe_dir
+                        .join("resources")
+                        .join("python")
+                        .join("Scripts")
+                        .join("python.exe"),
+                );
+            }
         }
-        // Fallback to system python on PATH
-        PathBuf::from("python")
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let bundled = PathBuf::from("./python/bin/python");
-        if bundled.exists() {
-            return bundled;
+        candidates.push(PathBuf::from("./python/bin/python"));
+        candidates.push(PathBuf::from("./python/bin/python3"));
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                candidates.push(exe_dir.join("python").join("bin").join("python"));
+                candidates.push(exe_dir.join("python").join("bin").join("python3"));
+
+                if let Some(contents_dir) = exe_dir.parent() {
+                    let resources_dir = contents_dir.join("Resources");
+                    candidates.push(resources_dir.join("python").join("bin").join("python"));
+                    candidates.push(resources_dir.join("python").join("bin").join("python3"));
+                }
+            }
         }
-        // Fallback to system python on PATH
-        PathBuf::from("python3")
     }
+
+    for candidate in candidates {
+        if candidate.exists() {
+            log::info!("Using bundled Python runtime: {}", candidate.display());
+            return candidate;
+        }
+    }
+
+    let fallback = if cfg!(target_os = "windows") {
+        PathBuf::from("python")
+    } else {
+        PathBuf::from("python3")
+    };
+
+    log::warn!(
+        "Bundled Python runtime not found, falling back to system executable: {}",
+        fallback.display()
+    );
+    fallback
 }
 
 #[tauri::command]

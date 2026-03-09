@@ -57,9 +57,9 @@ jobs:
 
       - name: Create Python venv and install dependencies
         run: |
-          py -3.12 -m venv python
-          python\Scripts\python.exe -m pip install --upgrade pip
-          python\Scripts\python.exe -m pip install -r scripts/requirements.txt
+          py -3.12 -m venv src-tauri\python
+          src-tauri\python\Scripts\python.exe -m pip install --upgrade pip
+          src-tauri\python\Scripts\python.exe -m pip install -r scripts/requirements.txt
 
       - name: Install dependencies
         run: npm install
@@ -204,6 +204,7 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
 
@@ -233,9 +234,9 @@ jobs:
 
       - name: Create Python venv and install dependencies
         run: |
-          python3.12 -m venv python
-          ./python/bin/python -m pip install --upgrade pip
-          ./python/bin/python -m pip install -r scripts/requirements.txt
+          python3.12 -m venv src-tauri/python
+          ./src-tauri/python/bin/python -m pip install --upgrade pip
+          ./src-tauri/python/bin/python -m pip install -r scripts/requirements.txt
 
       - name: Install dependencies
         run: npm install
