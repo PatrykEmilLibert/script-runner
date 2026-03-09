@@ -55,25 +55,58 @@ jobs:
             Write-Host "Windows code signing secrets detected. Authenticode signing will be applied."
           }
 
-      - name: Create Python venv and install dependencies
+      - name: Build portable bundled Python runtime (Windows)
         run: |
-          py -3.12 -m venv python
-          python\Scripts\python.exe -m pip install --upgrade pip
-          python\Scripts\python.exe -m pip install -r scripts/requirements.txt
-
           if (Test-Path src-tauri\python) {
             Remove-Item -Recurse -Force src-tauri\python
           }
-          Copy-Item -Recurse -Force python src-tauri\python
+
+          $pythonVersion = "3.12.9"
+          $pythonTag = "312"
+          $embedZip = "python-$pythonVersion-embed-amd64.zip"
+          $embedUrl = "https://www.python.org/ftp/python/$pythonVersion/$embedZip"
+          $embedPath = Join-Path $env:RUNNER_TEMP $embedZip
+
+          Invoke-WebRequest -Uri $embedUrl -OutFile $embedPath
+          Expand-Archive -Path $embedPath -DestinationPath "src-tauri\python" -Force
+
+          $pthPath = "src-tauri\python\python$pythonTag._pth"
+          if (-not (Test-Path $pthPath)) {
+            throw "Missing embedded Python ._pth file: $pthPath"
+          }
+
+          $pthContent = Get-Content $pthPath
+          $pthContent = $pthContent | ForEach-Object {
+            if ($_ -match '^#import site$') { 'import site' }
+            elseif ($_ -eq 'import site') { 'import site' }
+            else { $_ }
+          }
+          Set-Content -Path $pthPath -Value $pthContent -Encoding ascii
+
+          $getPipPath = Join-Path $env:RUNNER_TEMP "get-pip.py"
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath
+
+          & "src-tauri\python\python.exe" $getPipPath --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to bootstrap pip in embedded Python"
+          }
+
+          & "src-tauri\python\python.exe" -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upgrade pip in embedded Python"
+          }
+
+          & "src-tauri\python\python.exe" -m pip install -r scripts/requirements.txt
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install bundled Python requirements"
+          }
 
       - name: Verify bundled Python paths (Windows)
         run: |
-          if (-not (Test-Path "python\Scripts\python.exe")) {
-            throw "Missing python runtime in workspace root: python\\Scripts\\python.exe"
+          if (-not (Test-Path "src-tauri\python\python.exe")) {
+            throw "Missing python runtime in src-tauri: src-tauri\\python\\python.exe"
           }
-          if (-not (Test-Path "src-tauri\python\Scripts\python.exe")) {
-            throw "Missing python runtime in src-tauri: src-tauri\\python\\Scripts\\python.exe"
-          }
+          & "src-tauri\python\python.exe" --version
 
       - name: Install dependencies
         run: npm install
@@ -246,25 +279,41 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create Python venv and install dependencies
+      - name: Build bundled Python runtime (macOS)
         run: |
-          python3.12 -m venv python
-          ./python/bin/python -m pip install --upgrade pip
-          ./python/bin/python -m pip install -r scripts/requirements.txt
+          PYTHON_ROOT="$(python3.12 -c 'import pathlib,sys; print(pathlib.Path(sys.executable).resolve().parent.parent)')"
+          echo "Using Python root: $PYTHON_ROOT"
 
           rm -rf src-tauri/python
-          cp -R python src-tauri/python
+          mkdir -p src-tauri
+          cp -R "$PYTHON_ROOT" src-tauri/python
+
+          if [ -x "src-tauri/python/bin/python3" ]; then
+            PY_BIN="src-tauri/python/bin/python3"
+          elif [ -x "src-tauri/python/bin/python" ]; then
+            PY_BIN="src-tauri/python/bin/python"
+          else
+            echo "::error::Bundled Python binary not found in src-tauri/python/bin"
+            exit 1
+          fi
+
+          "$PY_BIN" -m ensurepip --upgrade || true
+          "$PY_BIN" -m pip install --upgrade pip
+          "$PY_BIN" -m pip install -r scripts/requirements.txt
 
       - name: Verify bundled Python paths (macOS)
         run: |
-          if [ ! -x "python/bin/python" ]; then
-            echo "::error::Missing python runtime in workspace root: python/bin/python"
+          if [ -x "src-tauri/python/bin/python3" ]; then
+            PY_BIN="src-tauri/python/bin/python3"
+          elif [ -x "src-tauri/python/bin/python" ]; then
+            PY_BIN="src-tauri/python/bin/python"
+          else
+            echo "::error::Missing python runtime in src-tauri/python/bin"
             exit 1
           fi
-          if [ ! -x "src-tauri/python/bin/python" ]; then
-            echo "::error::Missing python runtime in src-tauri: src-tauri/python/bin/python"
-            exit 1
-          fi
+
+          "$PY_BIN" --version
+          "$PY_BIN" -m pip --version
 
       - name: Install dependencies
         run: npm install

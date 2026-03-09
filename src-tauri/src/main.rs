@@ -369,6 +369,37 @@ fn is_directory_writable(path: &PathBuf) -> bool {
     }
 }
 
+fn is_python_exec_usable(candidate: &PathBuf) -> bool {
+    let mut cmd = Command::new(candidate);
+    cmd.arg("--version");
+
+    #[cfg(target_os = "windows")]
+    {
+        apply_no_console_window(&mut cmd);
+    }
+
+    match cmd.output() {
+        Ok(output) if output.status.success() => true,
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::warn!(
+                "Ignoring unusable Python executable {}: {}",
+                candidate.display(),
+                stderr.trim()
+            );
+            false
+        }
+        Err(e) => {
+            log::warn!(
+                "Ignoring unusable Python executable {}: {}",
+                candidate.display(),
+                e
+            );
+            false
+        }
+    }
+}
+
 fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
@@ -378,11 +409,19 @@ fn resolve_python_exec() -> PathBuf {
 
     #[cfg(target_os = "windows")]
     {
+        candidates.push(PathBuf::from("./python/python.exe"));
         candidates.push(PathBuf::from("./python/Scripts/python.exe"));
 
         if let Ok(exe) = std::env::current_exe() {
             if let Some(exe_dir) = exe.parent() {
+                candidates.push(exe_dir.join("python").join("python.exe"));
                 candidates.push(exe_dir.join("python").join("Scripts").join("python.exe"));
+                candidates.push(
+                    exe_dir
+                        .join("resources")
+                        .join("python")
+                        .join("python.exe"),
+                );
                 candidates.push(
                     exe_dir
                         .join("resources")
@@ -414,20 +453,35 @@ fn resolve_python_exec() -> PathBuf {
     }
 
     for candidate in candidates {
-        if candidate.exists() {
+        if candidate.exists() && is_python_exec_usable(&candidate) {
             log::info!("Using bundled Python runtime: {}", candidate.display());
             return candidate;
         }
     }
 
-    let fallback = if cfg!(target_os = "windows") {
-        PathBuf::from("python")
+    let fallback_candidates = if cfg!(target_os = "windows") {
+        vec![PathBuf::from("python"), PathBuf::from("py")]
     } else {
-        PathBuf::from("python3")
+        vec![PathBuf::from("python3"), PathBuf::from("python")]
     };
 
+    for fallback in &fallback_candidates {
+        if is_python_exec_usable(fallback) {
+            log::warn!(
+                "Bundled Python runtime not found/usable, falling back to system executable: {}",
+                fallback.display()
+            );
+            return fallback.clone();
+        }
+    }
+
+    let fallback = fallback_candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| PathBuf::from("python"));
+
     log::warn!(
-        "Bundled Python runtime not found, falling back to system executable: {}",
+        "No usable Python runtime found, returning default executable name: {}",
         fallback.display()
     );
     fallback
