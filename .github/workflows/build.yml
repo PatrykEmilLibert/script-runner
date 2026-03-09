@@ -61,12 +61,14 @@ jobs:
             Remove-Item -Recurse -Force src-tauri\python
           }
 
-          $pythonRoot = (& python -c "import pathlib,sys; print(pathlib.Path(sys.executable).resolve().parent.parent)").Trim()
-          if (-not $pythonRoot) {
-            throw "Failed to resolve Python root from setup-python"
+          $pythonExe = (& python -c "import pathlib,sys; print(pathlib.Path(sys.executable).resolve())").Trim()
+          if (-not $pythonExe) {
+            throw "Failed to resolve Python executable from setup-python"
           }
+
+          $pythonRoot = Split-Path -Parent $pythonExe
           if (-not (Test-Path (Join-Path $pythonRoot "python.exe"))) {
-            throw "setup-python root does not contain python.exe: $pythonRoot"
+            throw "setup-python directory does not contain python.exe: $pythonRoot"
           }
 
           New-Item -ItemType Directory -Path "src-tauri\python" -Force | Out-Null
