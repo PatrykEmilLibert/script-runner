@@ -12,7 +12,7 @@ npm install
 build.bat
 ```
 
-Windows release builds now bundle an internal Python runtime in `src-tauri/python` and ship it inside installer resources.
+Windows release builds now bundle an internal Python runtime from `python/` and ship it inside installer resources.
 
 ## CI/Release Build (signed updater artifacts)
 For production auto-update, create a tagged release and let GitHub Actions build signed assets.

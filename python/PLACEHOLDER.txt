@@ -1,0 +1,2 @@
+This placeholder keeps ./python path present for Tauri resources glob python/** in CI.
+Release workflows replace this directory with the embedded Python runtime at build time.
