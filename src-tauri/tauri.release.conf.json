@@ -43,7 +43,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["python/**"],
+    "resources": ["python/**/*"],
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
