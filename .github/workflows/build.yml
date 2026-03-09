@@ -289,8 +289,21 @@ jobs:
 
       - name: Build bundled Python runtime (macOS)
         run: |
-          PYTHON_ROOT="$(python3.12 -c 'import pathlib,sys; print(pathlib.Path(sys.executable).resolve().parent.parent)')"
+          PYTHON_VERSION="3.12.9"
+          PYTHON_PKG="python-${PYTHON_VERSION}-macos11.pkg"
+          PYTHON_PKG_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_PKG}"
+          PYTHON_PKG_PATH="${RUNNER_TEMP}/${PYTHON_PKG}"
+
+          curl -L "$PYTHON_PKG_URL" -o "$PYTHON_PKG_PATH"
+          sudo installer -pkg "$PYTHON_PKG_PATH" -target /
+
+          PYTHON_ROOT="/Library/Frameworks/Python.framework/Versions/3.12"
           echo "Using Python root: $PYTHON_ROOT"
+
+          if [ ! -x "$PYTHON_ROOT/bin/python3.12" ]; then
+            echo "::error::Official Python runtime missing expected binary: $PYTHON_ROOT/bin/python3.12"
+            exit 1
+          fi
 
           rm -rf src-tauri/python
           mkdir -p src-tauri
