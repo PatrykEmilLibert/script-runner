@@ -49,8 +49,37 @@ jobs:
           if [ ! -f src-tauri/python/PLACEHOLDER.txt ]; then
             printf 'CI placeholder for bundled python resources\n' > src-tauri/python/PLACEHOLDER.txt
           fi
+      - name: Prepare Tauri config without resources for backend lint
+        run: |
+          cat > src-tauri/tauri.ci.conf.json <<'EOF'
+          {
+            "productName": "ScriptRunner",
+            "version": "6.0.14",
+            "identifier": "com.scriptrunner.app",
+            "build": {
+              "frontendDist": "../dist"
+            },
+            "app": {
+              "windows": [
+                {
+                  "title": "ScriptRunner",
+                  "width": 1200,
+                  "height": 800
+                }
+              ],
+              "security": {
+                "csp": null
+              }
+            },
+            "bundle": {
+              "active": false,
+              "targets": "all",
+              "resources": []
+            }
+          }
+          EOF
       - run: cargo fmt --manifest-path=src-tauri/Cargo.toml -- --check
-      - run: cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
+      - run: TAURI_CONFIG=src-tauri/tauri.ci.conf.json cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
 
   test-frontend:
     runs-on: ubuntu-latest
