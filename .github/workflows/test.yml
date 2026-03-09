@@ -79,7 +79,9 @@ jobs:
           }
           EOF
       - run: cargo fmt --manifest-path=src-tauri/Cargo.toml -- --check
-      - run: TAURI_CONFIG=src-tauri/tauri.ci.conf.json cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
+      - name: Use CI Tauri config for backend lint
+        run: cp src-tauri/tauri.ci.conf.json src-tauri/tauri.conf.json
+      - run: cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
 
   test-frontend:
     runs-on: ubuntu-latest
