@@ -43,6 +43,12 @@ jobs:
           if [ ! -f dist/index.html ]; then
             printf '<!doctype html><html><body>CI placeholder</body></html>\n' > dist/index.html
           fi
+      - name: Prepare python resource placeholder for Tauri compile checks
+        run: |
+          mkdir -p src-tauri/python
+          if [ ! -f src-tauri/python/PLACEHOLDER.txt ]; then
+            printf 'CI placeholder for bundled python resources\n' > src-tauri/python/PLACEHOLDER.txt
+          fi
       - run: cargo fmt --manifest-path=src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path=src-tauri/Cargo.toml -- -D warnings
 
