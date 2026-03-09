@@ -171,6 +171,8 @@ fn run_pip_install(
     packages: &[String],
     current_dir: Option<&PathBuf>,
 ) -> Result<std::process::Output, String> {
+    ensure_pip_available(python_exec, current_dir)?;
+
     let mut cmd = Command::new(python_exec);
     cmd.args(["-m", "pip", "install"]);
     cmd.args(packages);
@@ -182,6 +184,77 @@ fn run_pip_install(
 
     cmd.output()
         .map_err(|e| format!("Failed to run pip: {}", e))
+}
+
+fn run_python_command(
+    python_exec: &PathBuf,
+    args: &[&str],
+    current_dir: Option<&PathBuf>,
+) -> Result<std::process::Output, String> {
+    let mut cmd = Command::new(python_exec);
+    cmd.args(args);
+    apply_no_console_window(&mut cmd);
+
+    if let Some(dir) = current_dir {
+        cmd.current_dir(dir);
+    }
+
+    cmd.output()
+        .map_err(|e| format!("Failed to run Python command: {}", e))
+}
+
+fn is_pip_available(
+    python_exec: &PathBuf,
+    current_dir: Option<&PathBuf>,
+) -> Result<bool, String> {
+    let output = run_python_command(python_exec, &["-m", "pip", "--version"], current_dir)?;
+    Ok(output.status.success())
+}
+
+fn ensure_pip_available(
+    python_exec: &PathBuf,
+    current_dir: Option<&PathBuf>,
+) -> Result<(), String> {
+    if is_pip_available(python_exec, current_dir)? {
+        return Ok(());
+    }
+
+    log::warn!(
+        "pip is missing for Python runtime {}, attempting bootstrap",
+        python_exec.display()
+    );
+
+    let ensurepip = run_python_command(
+        python_exec,
+        &["-m", "ensurepip", "--upgrade"],
+        current_dir,
+    )?;
+    if ensurepip.status.success() && is_pip_available(python_exec, current_dir)? {
+        log::info!("Bootstrapped pip using ensurepip for {}", python_exec.display());
+        return Ok(());
+    }
+
+    let bootstrap_code = r#"import pathlib, tempfile, urllib.request, subprocess, sys
+url = 'https://bootstrap.pypa.io/get-pip.py'
+dest = pathlib.Path(tempfile.gettempdir()) / 'get-pip.py'
+urllib.request.urlretrieve(url, dest)
+subprocess.check_call([sys.executable, str(dest), '--no-warn-script-location'])"#;
+
+    let get_pip = run_python_command(python_exec, &["-c", bootstrap_code], current_dir)?;
+    if get_pip.status.success() && is_pip_available(python_exec, current_dir)? {
+        log::info!("Bootstrapped pip using get-pip.py for {}", python_exec.display());
+        return Ok(());
+    }
+
+    let ensurepip_stderr = String::from_utf8_lossy(&ensurepip.stderr);
+    let get_pip_stderr = String::from_utf8_lossy(&get_pip.stderr);
+
+    Err(format!(
+        "pip is not available for Python runtime '{}'. ensurepip failed with: {}\nget-pip bootstrap failed with: {}",
+        python_exec.display(),
+        ensurepip_stderr.trim(),
+        get_pip_stderr.trim()
+    ))
 }
 
 fn extract_unavailable_packages(stderr: &str) -> HashSet<String> {
