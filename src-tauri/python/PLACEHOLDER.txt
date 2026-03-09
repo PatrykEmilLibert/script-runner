@@ -1,0 +1,2 @@
+This placeholder keeps src-tauri/python present in git so Tauri resources glob python/** always matches in CI.
+The real embedded Python runtime is generated into this directory during release builds.
