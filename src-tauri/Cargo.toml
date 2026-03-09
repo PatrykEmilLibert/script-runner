@@ -1,6 +1,6 @@
 [package]
 name = "script-runner"
-version = "6.0.16"
+version = "6.0.17"
 edition = "2021"
 
 [build-dependencies]
