@@ -566,16 +566,19 @@ fn resolve_python_exec() -> PathBuf {
 
     #[cfg(not(target_os = "windows"))]
     {
+        candidates.push(PathBuf::from("./python/bin/python3.12"));
         candidates.push(PathBuf::from("./python/bin/python"));
         candidates.push(PathBuf::from("./python/bin/python3"));
 
         if let Ok(exe) = std::env::current_exe() {
             if let Some(exe_dir) = exe.parent() {
+                candidates.push(exe_dir.join("python").join("bin").join("python3.12"));
                 candidates.push(exe_dir.join("python").join("bin").join("python"));
                 candidates.push(exe_dir.join("python").join("bin").join("python3"));
 
                 if let Some(contents_dir) = exe_dir.parent() {
                     let resources_dir = contents_dir.join("Resources");
+                    candidates.push(resources_dir.join("python").join("bin").join("python3.12"));
                     candidates.push(resources_dir.join("python").join("bin").join("python"));
                     candidates.push(resources_dir.join("python").join("bin").join("python3"));
                 }

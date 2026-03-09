@@ -286,9 +286,16 @@ jobs:
 
           rm -rf src-tauri/python
           mkdir -p src-tauri
-          cp -R "$PYTHON_ROOT" src-tauri/python
+          cp -R -L "$PYTHON_ROOT" src-tauri/python
 
-          if [ -x "src-tauri/python/bin/python3" ]; then
+          if [ -x "src-tauri/python/bin/python3.12" ]; then
+            cp -f "src-tauri/python/bin/python3.12" "src-tauri/python/bin/python3"
+            cp -f "src-tauri/python/bin/python3.12" "src-tauri/python/bin/python"
+          fi
+
+          if [ -x "src-tauri/python/bin/python3.12" ]; then
+            PY_BIN="src-tauri/python/bin/python3.12"
+          elif [ -x "src-tauri/python/bin/python3" ]; then
             PY_BIN="src-tauri/python/bin/python3"
           elif [ -x "src-tauri/python/bin/python" ]; then
             PY_BIN="src-tauri/python/bin/python"
@@ -304,7 +311,9 @@ jobs:
 
       - name: Verify bundled Python paths (macOS)
         run: |
-          if [ -x "src-tauri/python/bin/python3" ]; then
+          if [ -x "src-tauri/python/bin/python3.12" ]; then
+            PY_BIN="src-tauri/python/bin/python3.12"
+          elif [ -x "src-tauri/python/bin/python3" ]; then
             PY_BIN="src-tauri/python/bin/python3"
           elif [ -x "src-tauri/python/bin/python" ]; then
             PY_BIN="src-tauri/python/bin/python"
