@@ -536,6 +536,49 @@ fn is_python_exec_usable(candidate: &PathBuf) -> bool {
     }
 }
 
+fn is_python_runtime_healthy(candidate: &PathBuf) -> bool {
+    let modules = if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
+        "ssl,sqlite3,venv,ensurepip,pip,tkinter"
+    } else {
+        "ssl,sqlite3,venv,ensurepip,pip"
+    };
+
+    let healthcheck_code = format!(
+        "import importlib.util, sys; mods='{modules}'.split(','); missing=[m for m in mods if importlib.util.find_spec(m) is None]; sys.exit(0 if not missing else (print('missing:' + ','.join(missing)) or 1))"
+    );
+
+    let mut cmd = Command::new(candidate);
+    cmd.args(["-c", &healthcheck_code]);
+
+    #[cfg(target_os = "windows")]
+    {
+        apply_no_console_window(&mut cmd);
+    }
+
+    match cmd.output() {
+        Ok(output) if output.status.success() => true,
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            log::warn!(
+                "Python runtime healthcheck failed for {}: {} {}",
+                candidate.display(),
+                stdout.trim(),
+                stderr.trim()
+            );
+            false
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to run Python runtime healthcheck for {}: {}",
+                candidate.display(),
+                e
+            );
+            false
+        }
+    }
+}
+
 fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
@@ -591,14 +634,30 @@ fn resolve_python_exec() -> PathBuf {
             #[cfg(target_os = "windows")]
             {
                 let selected = resolve_writable_python_exec(&candidate);
-                log::info!("Using bundled Python runtime: {}", selected.display());
-                return selected;
+                if is_python_runtime_healthy(&selected) {
+                    log::info!("Using bundled Python runtime: {}", selected.display());
+                    return selected;
+                }
+
+                log::warn!(
+                    "Bundled Python runtime failed healthcheck: {}",
+                    selected.display()
+                );
+                continue;
             }
 
             #[cfg(not(target_os = "windows"))]
             {
-                log::info!("Using bundled Python runtime: {}", candidate.display());
-                return candidate;
+                if is_python_runtime_healthy(&candidate) {
+                    log::info!("Using bundled Python runtime: {}", candidate.display());
+                    return candidate;
+                }
+
+                log::warn!(
+                    "Bundled Python runtime failed healthcheck: {}",
+                    candidate.display()
+                );
+                continue;
             }
         }
     }
@@ -610,7 +669,7 @@ fn resolve_python_exec() -> PathBuf {
     };
 
     for fallback in &fallback_candidates {
-        if is_python_exec_usable(fallback) {
+        if is_python_exec_usable(fallback) && is_python_runtime_healthy(fallback) {
             log::warn!(
                 "Bundled Python runtime not found/usable, falling back to system executable: {}",
                 fallback.display()
