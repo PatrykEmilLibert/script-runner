@@ -57,9 +57,23 @@ jobs:
 
       - name: Create Python venv and install dependencies
         run: |
-          py -3.12 -m venv src-tauri\python
-          src-tauri\python\Scripts\python.exe -m pip install --upgrade pip
-          src-tauri\python\Scripts\python.exe -m pip install -r scripts/requirements.txt
+          py -3.12 -m venv python
+          python\Scripts\python.exe -m pip install --upgrade pip
+          python\Scripts\python.exe -m pip install -r scripts/requirements.txt
+
+          if (Test-Path src-tauri\python) {
+            Remove-Item -Recurse -Force src-tauri\python
+          }
+          Copy-Item -Recurse -Force python src-tauri\python
+
+      - name: Verify bundled Python paths (Windows)
+        run: |
+          if (-not (Test-Path "python\Scripts\python.exe")) {
+            throw "Missing python runtime in workspace root: python\\Scripts\\python.exe"
+          }
+          if (-not (Test-Path "src-tauri\python\Scripts\python.exe")) {
+            throw "Missing python runtime in src-tauri: src-tauri\\python\\Scripts\\python.exe"
+          }
 
       - name: Install dependencies
         run: npm install
@@ -234,9 +248,23 @@ jobs:
 
       - name: Create Python venv and install dependencies
         run: |
-          python3.12 -m venv src-tauri/python
-          ./src-tauri/python/bin/python -m pip install --upgrade pip
-          ./src-tauri/python/bin/python -m pip install -r scripts/requirements.txt
+          python3.12 -m venv python
+          ./python/bin/python -m pip install --upgrade pip
+          ./python/bin/python -m pip install -r scripts/requirements.txt
+
+          rm -rf src-tauri/python
+          cp -R python src-tauri/python
+
+      - name: Verify bundled Python paths (macOS)
+        run: |
+          if [ ! -x "python/bin/python" ]; then
+            echo "::error::Missing python runtime in workspace root: python/bin/python"
+            exit 1
+          fi
+          if [ ! -x "src-tauri/python/bin/python" ]; then
+            echo "::error::Missing python runtime in src-tauri: src-tauri/python/bin/python"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm install
