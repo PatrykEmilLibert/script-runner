@@ -144,10 +144,13 @@ fn ensure_pathlib_import(content: &str) -> String {
 }
 
 fn auto_rewrite_paths_to_script_dir(script_content: &str) -> (String, usize) {
-    let win_double = Regex::new(r#"\"(?i:[a-z]:\\[^\"\n]+)\""#).unwrap();
-    let win_single = Regex::new(r#"'(?i:[a-z]:\\[^'\n]+)'"#).unwrap();
-    let unix_double = Regex::new(r#"\"(?i:/(users|home|var|etc|opt|tmp)/[^\"\n]+)\""#).unwrap();
-    let unix_single = Regex::new(r#"'(?i:/(users|home|var|etc|opt|tmp)/[^'\n]+)'"#).unwrap();
+    let win_double = Regex::new(r#"(?i:[rubf]{0,2})\"(?i:[a-z]:\\[^\"\n]+)\""#).unwrap();
+    let win_single = Regex::new(r#"(?i:[rubf]{0,2})'(?i:[a-z]:\\[^'\n]+)'"#).unwrap();
+    let unix_double =
+        Regex::new(r#"(?i:[rubf]{0,2})\"(?i:/(users|home|var|etc|opt|tmp)/[^\"\n]+)\""#)
+            .unwrap();
+    let unix_single =
+        Regex::new(r#"(?i:[rubf]{0,2})'(?i:/(users|home|var|etc|opt|tmp)/[^'\n]+)'"#).unwrap();
 
     let patterns = [win_double, win_single, unix_double, unix_single];
 
@@ -159,11 +162,20 @@ fn auto_rewrite_paths_to_script_dir(script_content: &str) -> (String, usize) {
         updated = regex
             .replace_all(&source, |caps: &regex::Captures| {
                 let full = caps.get(0).map(|m| m.as_str()).unwrap_or_default();
-                if full.len() < 2 {
+                if full.len() < 3 {
                     return full.to_string();
                 }
 
-                let inner = &full[1..full.len() - 1];
+                let first_quote = full.find(['\'', '"']);
+                let Some(quote_idx) = first_quote else {
+                    return full.to_string();
+                };
+
+                if quote_idx + 2 > full.len() {
+                    return full.to_string();
+                }
+
+                let inner = &full[quote_idx + 1..full.len() - 1];
                 let Some(base) = extract_basename(inner) else {
                     return full.to_string();
                 };

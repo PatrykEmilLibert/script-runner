@@ -116,9 +116,21 @@ pub async fn execute_script(
         log::warn!("{}", warning);
     }
 
-    // For encrypted scripts: write to temp file, execute, then delete
-    let (temp_file, script_to_execute) =
-        if script_path.extension().and_then(|s| s.to_str()) == Some("enc") {
+    // Backward compatibility: older path rewrite could emit rstr(...), which should be str(...).
+    let needs_rstr_compat = script_content.contains("rstr(")
+        && !script_content.contains("def rstr")
+        && !script_content.contains("rstr =");
+
+    let execution_content = if needs_rstr_compat {
+        format!("rstr = str\n{}", script_content)
+    } else {
+        script_content.clone()
+    };
+
+    // For encrypted scripts (and compatibility-shimmed scripts): write to temp file, execute, then delete
+    let (temp_file, script_to_execute) = if script_path.extension().and_then(|s| s.to_str()) == Some("enc")
+        || needs_rstr_compat
+    {
             use std::io::Write;
             let temp_path = script_path
                 .parent()
@@ -128,7 +140,7 @@ pub async fn execute_script(
                 });
             let mut file = std::fs::File::create(&temp_path)
                 .map_err(|e| format!("Failed to create temp file: {}", e))?;
-            file.write_all(script_content.as_bytes())
+            file.write_all(execution_content.as_bytes())
                 .map_err(|e| format!("Failed to write temp file: {}", e))?;
             (Some(temp_path.clone()), temp_path)
         } else {
