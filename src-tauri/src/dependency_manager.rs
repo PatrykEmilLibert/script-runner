@@ -28,6 +28,19 @@ fn apply_no_console_window(cmd: &mut Command) {
     }
 }
 
+fn apply_macos_runtime_env(cmd: &mut Command) {
+    #[cfg(target_os = "macos")]
+    {
+        // Force real macOS version reporting (avoid legacy 10.16 compatibility mode).
+        cmd.env("SYSTEM_VERSION_COMPAT", "0");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = cmd;
+    }
+}
+
 // Map import names to pip package names for packages with mismatched names
 // Based on common PyPI package name mismatches
 fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
@@ -178,6 +191,7 @@ fn run_pip_install(
     cmd.args(["-m", "pip", "install"]);
     cmd.args(packages);
     apply_no_console_window(&mut cmd);
+    apply_macos_runtime_env(&mut cmd);
 
     if let Some(dir) = current_dir {
         cmd.current_dir(dir);
@@ -195,6 +209,7 @@ fn run_python_command(
     let mut cmd = Command::new(python_exec);
     cmd.args(args);
     apply_no_console_window(&mut cmd);
+    apply_macos_runtime_env(&mut cmd);
 
     if let Some(dir) = current_dir {
         cmd.current_dir(dir);

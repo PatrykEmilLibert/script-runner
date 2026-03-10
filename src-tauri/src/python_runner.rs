@@ -21,6 +21,19 @@ fn apply_no_console_window(cmd: &mut Command) {
     }
 }
 
+fn apply_macos_runtime_env(cmd: &mut Command) {
+    #[cfg(target_os = "macos")]
+    {
+        // Ensure Python sees the actual macOS version (not legacy compatibility 10.16).
+        cmd.env("SYSTEM_VERSION_COMPAT", "0");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = cmd;
+    }
+}
+
 // Map of Windows-specific imports to their descriptions
 fn get_windows_specific_imports() -> Vec<(&'static str, &'static str)> {
     vec![
@@ -138,6 +151,7 @@ pub async fn execute_script(
     let mut cmd = Command::new(python_exec);
     cmd.arg(&script_to_execute);
     apply_no_console_window(&mut cmd);
+    apply_macos_runtime_env(&mut cmd);
     if let Some(script_dir) = script_path.parent() {
         cmd.current_dir(script_dir);
     }
