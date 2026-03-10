@@ -128,9 +128,8 @@ pub async fn execute_script(
     };
 
     // For encrypted scripts (and compatibility-shimmed scripts): write to temp file, execute, then delete
-    let (temp_file, script_to_execute) = if script_path.extension().and_then(|s| s.to_str()) == Some("enc")
-        || needs_rstr_compat
-    {
+    let (temp_file, script_to_execute) =
+        if script_path.extension().and_then(|s| s.to_str()) == Some("enc") || needs_rstr_compat {
             use std::io::Write;
             let temp_path = script_path
                 .parent()

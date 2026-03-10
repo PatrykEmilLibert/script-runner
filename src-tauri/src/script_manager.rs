@@ -146,9 +146,7 @@ fn ensure_pathlib_import(content: &str) -> String {
 fn auto_rewrite_paths_to_script_dir(script_content: &str) -> (String, usize) {
     let win_double = Regex::new(r#"(?i:[rubf]{0,2})\"(?i:[a-z]:\\[^\"\n]+)\""#).unwrap();
     let win_single = Regex::new(r#"(?i:[rubf]{0,2})'(?i:[a-z]:\\[^'\n]+)'"#).unwrap();
-    let unix_double =
-        Regex::new(r#"(?i:[rubf]{0,2})\"(?i:/(users|home|var|etc|opt|tmp)/[^\"\n]+)\""#)
-            .unwrap();
+    let unix_double = Regex::new(r#"(?i:[rubf]{0,2})\"(?i:/(users|home|var|etc|opt|tmp)/[^\"\n]+)\""#).unwrap();
     let unix_single =
         Regex::new(r#"(?i:[rubf]{0,2})'(?i:/(users|home|var|etc|opt|tmp)/[^'\n]+)'"#).unwrap();
 
