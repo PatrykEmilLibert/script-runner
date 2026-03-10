@@ -496,11 +496,18 @@ fn normalize_requirement_entry(line: &str) -> Option<String> {
 
 fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> {
     let import_map = get_import_to_package_map();
+    let mut skipped_stdlib: BTreeSet<String> = BTreeSet::new();
 
-    content
+    let packages: Vec<String> = content
         .lines()
         .filter_map(normalize_requirement_entry)
-        .filter(|package| include_stdlib || !is_stdlib(package))
+        .filter(|package| {
+            if is_stdlib(package) {
+                skipped_stdlib.insert(package.to_string());
+                return false;
+            }
+            true
+        })
         .map(|package| {
             // Map import/module name to pip package name if needed
             let mapped = import_map
@@ -509,7 +516,16 @@ fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> 
                 .unwrap_or(package.as_str());
             mapped.to_string()
         })
-        .collect()
+        .collect();
+
+    if include_stdlib && !skipped_stdlib.is_empty() {
+        log::warn!(
+            "Ignoring stdlib entries in requirements.txt (not installable via pip): {:?}",
+            skipped_stdlib
+        );
+    }
+
+    packages
 }
 
 pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, String> {
@@ -831,21 +847,37 @@ pub async fn install_dependencies(
     }
 
     let import_map = get_import_to_package_map();
+    let mut skipped_stdlib: BTreeSet<String> = BTreeSet::new();
 
     // Map package names in case they're import names instead of pip names
     let mapped_packages: Vec<String> = packages
         .iter()
-        .map(|pkg| {
-            let package = pkg
-                .split(['=', '>', '<', '!', '[', ' '])
-                .next()
-                .unwrap_or(pkg)
-                .trim();
+        .filter_map(|pkg| normalize_requirement_entry(pkg))
+        .filter(|package| {
+            if is_stdlib(package) {
+                skipped_stdlib.insert(package.to_string());
+                return false;
+            }
+            true
+        })
+        .map(|package| {
+            let package_str = package.as_str();
 
-            let mapped = import_map.get(package).copied().unwrap_or(package);
+            let mapped = import_map.get(package_str).copied().unwrap_or(package_str);
             mapped.to_string()
         })
         .collect();
+
+    if !skipped_stdlib.is_empty() {
+        log::warn!(
+            "Skipping stdlib modules during dependency install: {:?}",
+            skipped_stdlib
+        );
+    }
+
+    if mapped_packages.is_empty() {
+        return Ok(());
+    }
 
     if let Err(raw_error) = install_packages_resilient(python_exec, &mapped_packages, None) {
         return Err(format!("Pip install failed: {}", raw_error));

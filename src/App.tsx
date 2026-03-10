@@ -95,12 +95,12 @@ export default function App() {
   const [showGitHubAuth, setShowGitHubAuth] = useState(false);
   const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("6.0.27");
+  const [appVersion, setAppVersion] = useState<string>("6.0.28");
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
-      .catch(() => setAppVersion("6.0.27"));
+      .catch(() => setAppVersion("6.0.28"));
   }, []);
 
   useEffect(() => {
@@ -736,7 +736,7 @@ export default function App() {
               color="pink"
               variant="pills"
             >
-              <Tabs.List mb="lg">
+              <Tabs.List mb="lg" className="sticky-tabs-nav">
                 <Tabs.Tab value="dashboard" leftSection={<IconDashboard size={16} />}>
                   {t('nav.dashboard')}
                 </Tabs.Tab>
@@ -1043,7 +1043,7 @@ export default function App() {
             color="pink"
             variant="pills"
           >
-            <Tabs.List mb="lg" className="bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-lg p-2">
+            <Tabs.List mb="lg" className="sticky-tabs-nav bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-lg p-2">
               <Tabs.Tab 
                 value="dashboard" 
                 leftSection={<IconDashboard size={16} />}

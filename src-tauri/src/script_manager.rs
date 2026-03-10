@@ -915,6 +915,14 @@ fn is_stdlib_module(module: &str) -> bool {
     // Common Python stdlib modules
     let stdlib_modules = [
         "__future__",
+        "asyncio",
+        "concurrent",
+        "configparser",
+        "ctypes",
+        "queue",
+        "subprocess",
+        "threading",
+        "multiprocessing",
         "os",
         "sys",
         "re",

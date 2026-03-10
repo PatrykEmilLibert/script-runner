@@ -579,6 +579,86 @@ fn is_python_runtime_healthy(candidate: &PathBuf) -> bool {
     }
 }
 
+fn isolated_python_exec_path(venv_dir: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        return venv_dir.join("Scripts").join("python.exe");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let py3 = venv_dir.join("bin").join("python3");
+        if py3.exists() {
+            return py3;
+        }
+        return venv_dir.join("bin").join("python");
+    }
+}
+
+fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
+    let venv_dir = dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("ScriptRunner")
+        .join("python-venv")
+        .join(env!("CARGO_PKG_VERSION"));
+
+    let venv_python = isolated_python_exec_path(&venv_dir);
+    if venv_python.exists() && is_python_exec_usable(&venv_python) {
+        return venv_python;
+    }
+
+    if let Some(parent) = venv_dir.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if venv_dir.exists() {
+        let _ = fs::remove_dir_all(&venv_dir);
+    }
+
+    let mut cmd = Command::new(base_python);
+    cmd.args(["-m", "venv", &venv_dir.to_string_lossy()]);
+
+    #[cfg(target_os = "windows")]
+    {
+        apply_no_console_window(&mut cmd);
+    }
+
+    match cmd.output() {
+        Ok(output) if output.status.success() => {
+            if venv_python.exists() && is_python_exec_usable(&venv_python) {
+                log::info!(
+                    "Using isolated app Python environment: {}",
+                    venv_python.display()
+                );
+                venv_python
+            } else {
+                log::warn!(
+                    "Isolated app Python environment creation completed but interpreter not usable, falling back to {}",
+                    base_python.display()
+                );
+                base_python.clone()
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::warn!(
+                "Failed to create isolated app Python environment (exit: {:?}): {}. Falling back to {}",
+                output.status.code(),
+                stderr.trim(),
+                base_python.display()
+            );
+            base_python.clone()
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to launch venv creation using {}: {}. Falling back to base interpreter",
+                base_python.display(),
+                e
+            );
+            base_python.clone()
+        }
+    }
+}
+
 fn resolve_python_exec() -> PathBuf {
     if let Ok(custom) = env::var("PYTHON_EXEC") {
         return PathBuf::from(custom);
@@ -635,8 +715,9 @@ fn resolve_python_exec() -> PathBuf {
             {
                 let selected = resolve_writable_python_exec(&candidate);
                 if is_python_runtime_healthy(&selected) {
+                    let isolated = ensure_isolated_python_exec(&selected);
                     log::info!("Using bundled Python runtime: {}", selected.display());
-                    return selected;
+                    return isolated;
                 }
 
                 log::warn!(
@@ -649,8 +730,9 @@ fn resolve_python_exec() -> PathBuf {
             #[cfg(not(target_os = "windows"))]
             {
                 if is_python_runtime_healthy(&candidate) {
+                    let isolated = ensure_isolated_python_exec(&candidate);
                     log::info!("Using bundled Python runtime: {}", candidate.display());
-                    return candidate;
+                    return isolated;
                 }
 
                 log::warn!(
@@ -674,7 +756,7 @@ fn resolve_python_exec() -> PathBuf {
                 "Bundled Python runtime not found/usable, falling back to system executable: {}",
                 fallback.display()
             );
-            return fallback.clone();
+            return ensure_isolated_python_exec(fallback);
         }
     }
 

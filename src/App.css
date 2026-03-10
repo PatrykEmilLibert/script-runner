@@ -14,6 +14,21 @@
   animation: slideUp 0.3s ease-out;
 }
 
+.sticky-tabs-nav {
+  position: sticky;
+  top: 78px;
+  z-index: 120;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(244, 114, 182, 0.2);
+}
+
+[data-mantine-color-scheme="dark"] .sticky-tabs-nav {
+  background: rgba(31, 41, 55, 0.85);
+  border-color: rgba(244, 114, 182, 0.28);
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
