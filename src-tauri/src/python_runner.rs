@@ -34,6 +34,27 @@ fn apply_macos_runtime_env(cmd: &mut Command) {
     }
 }
 
+#[cfg(target_os = "macos")]
+const MACOS_VERSION_COMPAT_LAUNCHER: &str = r#"import os, platform, runpy, subprocess, sys
+os.environ['SYSTEM_VERSION_COMPAT'] = '0'
+
+def _real_macos_version():
+    try:
+        return subprocess.check_output(['/usr/bin/sw_vers', '-productVersion'], text=True).strip()
+    except Exception:
+        return None
+
+_version = _real_macos_version()
+if _version:
+    _machine = platform.machine()
+    def _patched_mac_ver(release='', versioninfo=('', '', ''), machine=''):
+        return (_version, ('', '', ''), _machine)
+    platform.mac_ver = _patched_mac_ver
+
+script_path = sys.argv[1]
+sys.argv = [script_path] + sys.argv[2:]
+runpy.run_path(script_path, run_name='__main__')"#;
+
 // Map of Windows-specific imports to their descriptions
 fn get_windows_specific_imports() -> Vec<(&'static str, &'static str)> {
     vec![
@@ -149,7 +170,20 @@ pub async fn execute_script(
         };
 
     let mut cmd = Command::new(python_exec);
-    cmd.arg(&script_to_execute);
+    #[cfg(target_os = "macos")]
+    {
+        cmd.args([
+            "-c",
+            MACOS_VERSION_COMPAT_LAUNCHER,
+            &script_to_execute.to_string_lossy(),
+        ]);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        cmd.arg(&script_to_execute);
+    }
+
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
     if let Some(script_dir) = script_path.parent() {

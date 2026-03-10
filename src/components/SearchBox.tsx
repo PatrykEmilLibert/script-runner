@@ -34,6 +34,7 @@ export default function SearchBox({ onSearch }: SearchBoxProps) {
         />
         {query && (
           <button
+            type="button"
             onClick={clear}
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
             title={t('buttons.clear')}

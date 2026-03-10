@@ -41,14 +41,14 @@ export default function ScriptList({
 
   const isFavorite = (script: string) => favorites.includes(script);
 
-  const ScriptCard = ({ script, idx }: { script: string; idx: number }) => (
+  const renderScriptCard = (script: string, idx: number) => (
     <motion.div
+      key={script}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: idx * 0.05 }}
     >
       <Card
-        key={script}
         p="md"
         radius="md"
         withBorder
@@ -149,7 +149,7 @@ export default function ScriptList({
         cols={{ base: 1, xs: 2, sm: 3, md: 4, lg: 5 }} 
         spacing="md"
       >
-        {scripts.map((script, idx) => <ScriptCard key={script} script={script} idx={idx} />)}
+        {scripts.map((script, idx) => renderScriptCard(script, idx))}
       </SimpleGrid>
     </Stack>
   );

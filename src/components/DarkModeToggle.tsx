@@ -41,6 +41,7 @@ export default function DarkModeToggle() {
 
   return (
     <button
+      type="button"
       onClick={toggle}
       className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
       title={isDark ? 'Jasny tryb' : 'Ciemny tryb'}

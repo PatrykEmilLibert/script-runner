@@ -99,7 +99,7 @@ export function NotificationCenter({
       {/* Floating Button */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 p-4 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-2xl hover:shadow-pink-500/50 transition-all"
+        className="fixed bottom-6 right-6 z-[1400] p-4 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-2xl hover:shadow-pink-500/50 transition-all"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         style={{
@@ -128,7 +128,7 @@ export function NotificationCenter({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1450]"
             />
 
             {/* Panel */}
@@ -137,7 +137,7 @@ export function NotificationCenter({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-gray-900 border-l-2 border-pink-500/30 shadow-2xl z-[70] flex flex-col"
+              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-gray-900 border-l-2 border-pink-500/30 shadow-2xl z-[1500] flex flex-col"
               style={{
                 boxShadow: '-10px 0 50px rgba(236, 72, 153, 0.3)',
               }}
