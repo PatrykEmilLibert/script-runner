@@ -95,13 +95,13 @@ export default function App() {
   const [showGitHubAuth, setShowGitHubAuth] = useState(false);
   const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("6.0.34");
+  const [appVersion, setAppVersion] = useState<string>("6.0.35");
   const hasBootstrappedRef = useRef(false);
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
-      .catch(() => setAppVersion("6.0.34"));
+      .catch(() => setAppVersion("6.0.35"));
   }, []);
 
   useEffect(() => {

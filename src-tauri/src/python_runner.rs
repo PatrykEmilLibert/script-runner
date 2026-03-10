@@ -46,81 +46,47 @@ def _real_macos_version():
 
 _version = _real_macos_version()
 if _version:
-    _machine = platform.machine()
+    _machine = platform.machine() or 'x86_64'
+    _parts = [int(p) for p in _version.split('.') if p.isdigit()]
+    _major = _parts[0] if _parts else 0
+    _minor = _parts[1] if len(_parts) > 1 else 0
+    _micro = _parts[2] if len(_parts) > 2 else 0
+
     def _patched_mac_ver(release='', versioninfo=('', '', ''), machine=''):
         return (_version, ('', '', ''), _machine)
+
+    def _patched_release():
+        return f"{_major}.{_minor}.{_micro}"
+
+    def _patched_version():
+        return _patched_release()
+
+    def _patched_platform(*args, **kwargs):
+        return f"macOS-{_version}-{_machine}"
+
     platform.mac_ver = _patched_mac_ver
+    platform.release = _patched_release
+    platform.version = _patched_version
+    platform.platform = _patched_platform
+
+    try:
+        _orig_uname = os.uname
+
+        def _patched_uname():
+            u = _orig_uname()
+            return os.uname_result((u.sysname, u.nodename, _patched_release(), _patched_version(), u.machine))
+
+        os.uname = _patched_uname
+    except Exception:
+        pass
 
 script_path = sys.argv[1]
 sys.argv = [script_path] + sys.argv[2:]
 runpy.run_path(script_path, run_name='__main__')"#;
 
-// Map of Windows-specific imports to their descriptions
-fn get_windows_specific_imports() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("win32com", "Windows COM library"),
-        ("win32con", "Windows constants"),
-        ("win32api", "Windows API access"),
-        ("win32file", "Windows file operations"),
-        ("win32event", "Windows event handling"),
-        ("win32gui", "Windows GUI operations"),
-        ("win32inet", "Windows internet operations"),
-        ("win32net", "Windows network operations"),
-        ("win32netcon", "Windows network constants"),
-        ("win32pipe", "Windows pipe operations"),
-        ("win32print", "Windows print operations"),
-        ("win32process", "Windows process operations"),
-        ("win32security", "Windows security operations"),
-        ("win32service", "Windows service operations"),
-        ("win32wnet", "Windows network functions"),
-        ("pywintypes", "Python Windows types"),
-        ("pywin32", "Python Windows extensions"),
-        ("ctypes.windll", "Windows DLL access"),
-        ("winreg", "Windows registry access"),
-        ("winsound", "Windows sound operations"),
-        ("msvcrt", "Microsoft C runtime library"),
-        ("_winreg", "Windows registry (legacy)"),
-        ("_ctypes", "C types library (Windows-specific usage)"),
-        ("comtypes", "COM types for Windows"),
-        ("pywinauto", "Windows GUI automation"),
-        ("win_inet_pton", "Windows inet functions"),
-    ]
-}
-
 pub fn check_platform_compatibility(script_content: &str) -> Result<Vec<String>, String> {
-    let os = std::env::consts::OS;
-
-    // Only check non-Windows platforms
-    if os == "windows" {
-        return Ok(vec![]);
-    }
-
-    let windows_imports = get_windows_specific_imports();
-    let mut found_issues = vec![];
-
-    for line in script_content.lines() {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with("#") {
-            continue;
-        }
-
-        for (import, description) in &windows_imports {
-            // Check for: import X, from X import Y, from X.Y import Z
-            if trimmed.contains(&format!("import {}", import))
-                || trimmed.contains(&format!("from {}", import))
-                || trimmed.contains(&format!(
-                    "from {}",
-                    import.split('.').next().unwrap_or(import)
-                ))
-            {
-                found_issues.push(format!("  • {} ({})", import, description));
-            }
-        }
-    }
-
-    Ok(found_issues)
+    let _ = script_content;
+    Ok(vec![])
 }
 
 pub async fn execute_script(
