@@ -591,7 +591,7 @@ fn isolated_python_exec_path(venv_dir: &Path) -> PathBuf {
         if py3.exists() {
             return py3;
         }
-        return venv_dir.join("bin").join("python");
+        venv_dir.join("bin").join("python")
     }
 }
 
