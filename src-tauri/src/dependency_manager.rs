@@ -466,8 +466,8 @@ fn is_stdlib(module: &str) -> bool {
 
 fn force_install_all_requirements() -> bool {
     env::var("SR_FORCE_INSTALL_ALL_REQUIREMENTS")
-    .map(|v| v != "0")
-    .unwrap_or(true)
+        .map(|v| v != "0")
+        .unwrap_or(true)
 }
 
 fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> {
@@ -586,7 +586,10 @@ pub async fn ensure_requirements(
     let packages = requirements_to_packages(&content, include_stdlib);
 
     if packages.is_empty() {
-        log::info!("No packages to install from requirements in {:?}", script_dir);
+        log::info!(
+            "No packages to install from requirements in {:?}",
+            script_dir
+        );
         return Ok(());
     }
 
