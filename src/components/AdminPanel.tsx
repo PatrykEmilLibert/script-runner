@@ -96,6 +96,18 @@ interface BulkScriptOperationResult {
 
 export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefreshScripts }: AdminPanelProps) {
   const { showSuccess, showError } = useNotifications();
+
+  const readInputValue = (payload: unknown): string => {
+    if (typeof payload === 'string') return payload;
+    if (payload && typeof payload === 'object') {
+      const eventLike = payload as { currentTarget?: { value?: unknown }; target?: { value?: unknown } };
+      const current = eventLike.currentTarget?.value;
+      if (typeof current === 'string') return current;
+      const target = eventLike.target?.value;
+      if (typeof target === 'string') return target;
+    }
+    return '';
+  };
   
   // State management
   const [activeTab, setActiveTab] = useState<string | null>('overview');
@@ -1100,7 +1112,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
                   label="Block Reason"
                   placeholder="Enter reason for blocking the application..."
                   value={killSwitchReason}
-                  onChange={(e) => setKillSwitchReason(e.currentTarget.value)}
+                  onChange={(e) => setKillSwitchReason(readInputValue(e))}
                   minRows={3}
                 />
 
@@ -1128,7 +1140,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
                   label="Schedule for"
                   type="datetime-local"
                   value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.currentTarget.value)}
+                  onChange={(e) => setScheduledDate(readInputValue(e))}
                 />
               </Stack>
             </Card>
@@ -1142,7 +1154,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
                   <TextInput
                     placeholder="User ID or email..."
                     value={newWhitelistItem}
-                    onChange={(e) => setNewWhitelistItem(e.currentTarget.value)}
+                    onChange={(e) => setNewWhitelistItem(readInputValue(e))}
                     style={{ flex: 1 }}
                   />
                   <Button className="btn-pink" onClick={handleAddToWhitelist}>
@@ -1301,7 +1313,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
             onChange={(e) =>
               setReplaceModal((prev) => ({
                 ...prev,
-                content: e.currentTarget.value,
+                content: readInputValue(e),
               }))
             }
             minRows={16}
@@ -1343,13 +1355,13 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
           <TextInput
             label="Script Name"
             value={editModal.name}
-            onChange={(e) => setEditModal((prev) => ({ ...prev, name: e.currentTarget.value }))}
+            onChange={(e) => setEditModal((prev) => ({ ...prev, name: readInputValue(e) }))}
           />
           <TextInput
             label="Description"
             value={editModal.description}
             onChange={(e) =>
-              setEditModal((prev) => ({ ...prev, description: e.currentTarget.value }))
+              setEditModal((prev) => ({ ...prev, description: readInputValue(e) }))
             }
           />
           <Group grow>
@@ -1357,21 +1369,21 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
               label="Author"
               value={editModal.author}
               onChange={(e) =>
-                setEditModal((prev) => ({ ...prev, author: e.currentTarget.value }))
+                setEditModal((prev) => ({ ...prev, author: readInputValue(e) }))
               }
             />
             <TextInput
               label="Version"
               value={editModal.version}
               onChange={(e) =>
-                setEditModal((prev) => ({ ...prev, version: e.currentTarget.value }))
+                setEditModal((prev) => ({ ...prev, version: readInputValue(e) }))
               }
             />
           </Group>
           <Textarea
             label="main.py content"
             value={editModal.content}
-            onChange={(e) => setEditModal((prev) => ({ ...prev, content: e.currentTarget.value }))}
+            onChange={(e) => setEditModal((prev) => ({ ...prev, content: readInputValue(e) }))}
             minRows={16}
             autosize
           />
@@ -1421,7 +1433,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
             placeholder="Set author for all selected scripts"
             value={bulkMetadataModal.author}
             onChange={(e) =>
-              setBulkMetadataModal((prev) => ({ ...prev, author: e.currentTarget.value }))
+              setBulkMetadataModal((prev) => ({ ...prev, author: readInputValue(e) }))
             }
           />
           <TextInput
@@ -1429,7 +1441,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
             placeholder="Set version for all selected scripts"
             value={bulkMetadataModal.version}
             onChange={(e) =>
-              setBulkMetadataModal((prev) => ({ ...prev, version: e.currentTarget.value }))
+              setBulkMetadataModal((prev) => ({ ...prev, version: readInputValue(e) }))
             }
           />
           <TextInput
@@ -1439,7 +1451,7 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
             onChange={(e) =>
               setBulkMetadataModal((prev) => ({
                 ...prev,
-                descriptionPrefix: e.currentTarget.value,
+                descriptionPrefix: readInputValue(e),
               }))
             }
           />

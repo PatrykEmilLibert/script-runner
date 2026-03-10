@@ -11,7 +11,7 @@ export default function SearchBox({ onSearch }: SearchBoxProps) {
   const { t } = useTranslation();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const q = e.target.value;
+    const q = e?.currentTarget?.value ?? e?.target?.value ?? '';
     setQuery(q);
     onSearch(q);
   };
