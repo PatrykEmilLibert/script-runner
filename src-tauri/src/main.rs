@@ -772,6 +772,40 @@ fn resolve_python_exec() -> PathBuf {
     fallback
 }
 
+fn extract_missing_module_name(python_error: &str) -> Option<String> {
+    for line in python_error.lines() {
+        let marker = "No module named ";
+        if let Some(pos) = line.find(marker) {
+            let tail = line[pos + marker.len()..].trim();
+
+            if let Some(stripped) = tail.strip_prefix('\'') {
+                if let Some(end) = stripped.find('\'') {
+                    let module = stripped[..end].trim();
+                    if !module.is_empty() {
+                        return Some(module.to_string());
+                    }
+                }
+            }
+
+            if let Some(stripped) = tail.strip_prefix('"') {
+                if let Some(end) = stripped.find('"') {
+                    let module = stripped[..end].trim();
+                    if !module.is_empty() {
+                        return Some(module.to_string());
+                    }
+                }
+            }
+
+            let module = tail.trim_matches(['\'', '"', '.']);
+            if !module.is_empty() {
+                return Some(module.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
 async fn check_kill_switch() -> Result<bool, String> {
     // Check local override first
@@ -939,7 +973,27 @@ async fn run_script(
     }
 
     // Run script and capture history
-    let result = python_runner::execute_script(&script_path, &state.python_exec, args).await;
+    let mut result =
+        python_runner::execute_script(&script_path, &state.python_exec, args.clone()).await;
+
+    // Self-heal missing dependency errors by installing missing module and retrying once.
+    if let Err(error_text) = &result {
+        if let Some(module_name) = extract_missing_module_name(error_text) {
+            log::warn!(
+                "Detected missing module '{}' while running '{}'. Attempting auto-install and single retry.",
+                module_name,
+                script_name
+            );
+
+            if dependency_manager::install_dependencies(&[module_name], &state.python_exec)
+                .await
+                .is_ok()
+            {
+                result =
+                    python_runner::execute_script(&script_path, &state.python_exec, args).await;
+            }
+        }
+    }
     let end_time = chrono::Utc::now();
     let duration = end_time.signed_duration_since(start_time);
 
