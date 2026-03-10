@@ -57,15 +57,13 @@ class ErrorBoundary extends React.Component<
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <MantineProvider
-        theme={theme}
-        defaultColorScheme={isDark ? 'dark' : 'light'}
-      >
-        <Notifications position="top-right" zIndex={1000} />
-        <App />
-      </MantineProvider>
-    </ErrorBoundary>
-  </React.StrictMode>,
+  <ErrorBoundary>
+    <MantineProvider
+      theme={theme}
+      defaultColorScheme={isDark ? 'dark' : 'light'}
+    >
+      <Notifications position="top-right" zIndex={1000} />
+      <App />
+    </MantineProvider>
+  </ErrorBoundary>,
 );

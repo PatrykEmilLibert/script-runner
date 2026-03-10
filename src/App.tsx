@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
@@ -95,12 +95,13 @@ export default function App() {
   const [showGitHubAuth, setShowGitHubAuth] = useState(false);
   const [isWindowsFrameless, setIsWindowsFrameless] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("6.0.29");
+  const [appVersion, setAppVersion] = useState<string>("6.0.30");
+  const hasBootstrappedRef = useRef(false);
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
-      .catch(() => setAppVersion("6.0.29"));
+      .catch(() => setAppVersion("6.0.30"));
   }, []);
 
   useEffect(() => {
@@ -370,8 +371,12 @@ export default function App() {
     }
   };
 
-  const initializeApp = async () => {
-    setIsLoading(true);
+  const initializeApp = async (showBlockingLoader = false) => {
+    const shouldBlockUi = showBlockingLoader || !hasBootstrappedRef.current;
+    if (shouldBlockUi) {
+      setIsLoading(true);
+    }
+
     try {
       let killSwitchBlocked = false;
       let killSwitchConfig: any = null;
@@ -477,7 +482,10 @@ export default function App() {
         setNetworkError(true);
       }
     } finally {
-      setIsLoading(false);
+      if (shouldBlockUi) {
+        setIsLoading(false);
+      }
+      hasBootstrappedRef.current = true;
     }
   };
 
@@ -486,12 +494,12 @@ export default function App() {
     if (isAdminStatus) {
       setAppBlocked(false);
       setErrorMessage("");
-      await initializeApp();
+      await initializeApp(false);
     }
   };
 
   useEffect(() => {
-    initializeApp();
+    initializeApp(true);
   }, []);
 
   const loadLocalScripts = async (baseDir?: string) => {
@@ -627,7 +635,7 @@ export default function App() {
           </div>
 
           <div className="flex justify-center">
-            <Button color="pink" variant="light" onClick={initializeApp}>
+            <Button color="pink" variant="light" onClick={() => initializeApp(false)}>
               Retry Access Check
             </Button>
           </div>
