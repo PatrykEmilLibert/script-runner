@@ -4,6 +4,7 @@
 )]
 
 use chrono::TimeZone;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -972,27 +973,46 @@ async fn run_script(
         let _ = std::fs::remove_file(temp_analysis); // Cleanup
     }
 
-    // Run script and capture history
+    // Run script and iteratively self-heal missing dependency errors.
     let mut result =
         python_runner::execute_script(&script_path, &state.python_exec, args.clone()).await;
+    let mut attempted_modules: HashSet<String> = HashSet::new();
+    const MAX_AUTO_INSTALL_ATTEMPTS: usize = 20;
 
-    // Self-heal missing dependency errors by installing missing module and retrying once.
-    if let Err(error_text) = &result {
-        if let Some(module_name) = extract_missing_module_name(error_text) {
+    for _ in 0..MAX_AUTO_INSTALL_ATTEMPTS {
+        let missing_module = match &result {
+            Ok(_) => None,
+            Err(error_text) => extract_missing_module_name(error_text),
+        };
+
+        let Some(module_name) = missing_module else {
+            break;
+        };
+
+        if !attempted_modules.insert(module_name.clone()) {
             log::warn!(
-                "Detected missing module '{}' while running '{}'. Attempting auto-install and single retry.",
+                "Detected repeated missing module '{}' while running '{}'. Stopping auto-install loop.",
                 module_name,
                 script_name
             );
-
-            if dependency_manager::install_dependencies(&[module_name], &state.python_exec)
-                .await
-                .is_ok()
-            {
-                result =
-                    python_runner::execute_script(&script_path, &state.python_exec, args).await;
-            }
+            break;
         }
+
+        log::warn!(
+            "Detected missing module '{}' while running '{}'. Installing and retrying.",
+            module_name,
+            script_name
+        );
+
+        if dependency_manager::install_dependencies(&[module_name], &state.python_exec)
+            .await
+            .is_err()
+        {
+            break;
+        }
+
+        result =
+            python_runner::execute_script(&script_path, &state.python_exec, args.clone()).await;
     }
     let end_time = chrono::Utc::now();
     let duration = end_time.signed_duration_since(start_time);

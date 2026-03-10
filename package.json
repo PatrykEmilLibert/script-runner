@@ -1,6 +1,6 @@
 {
   "productName": "ScriptRunner",
-  "version": "6.0.32",
+  "version": "6.0.33",
   "description": "Python Script Runner with Auto-Update and Dependency Management",
   "type": "module",
   "scripts": {
