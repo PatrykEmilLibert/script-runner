@@ -470,24 +470,43 @@ fn force_install_all_requirements() -> bool {
         .unwrap_or(true)
 }
 
+fn normalize_requirement_entry(line: &str) -> Option<String> {
+    let raw = line.trim();
+    if raw.is_empty() || raw.starts_with('#') || raw.starts_with('-') {
+        return None;
+    }
+
+    let package = raw
+        .split(['=', '>', '<', '!', '[', ' '])
+        .next()
+        .unwrap_or(raw)
+        .trim();
+
+    if package.is_empty() {
+        return None;
+    }
+
+    // Skip pseudo-modules and invalid names that pip cannot install (e.g. __future__).
+    if package.starts_with('_') || (package.starts_with("__") && package.ends_with("__")) {
+        return None;
+    }
+
+    Some(package.to_string())
+}
+
 fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> {
     let import_map = get_import_to_package_map();
 
     content
         .lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter(|line| include_stdlib || !is_stdlib(line))
-        .map(|s| {
-            // Extract package name (without version specifiers)
-            let package = s
-                .split(['=', '>', '<', '!', '[', ' '])
-                .next()
-                .unwrap_or(s)
-                .trim();
-
-            // Map import name to pip package name if needed
-            let mapped = import_map.get(package).copied().unwrap_or(package);
+        .filter_map(normalize_requirement_entry)
+        .filter(|package| include_stdlib || !is_stdlib(package))
+        .map(|package| {
+            // Map import/module name to pip package name if needed
+            let mapped = import_map
+                .get(package.as_str())
+                .copied()
+                .unwrap_or(package.as_str());
             mapped.to_string()
         })
         .collect()
@@ -532,9 +551,8 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     if req_file.exists() {
         if let Ok(req_content) = std::fs::read_to_string(&req_file) {
             for line in req_content.lines() {
-                let package = line.split('=').next().unwrap_or("").trim();
-                if !package.is_empty() {
-                    imports.insert(package.to_string());
+                if let Some(package) = normalize_requirement_entry(line) {
+                    imports.insert(package);
                 }
             }
         }

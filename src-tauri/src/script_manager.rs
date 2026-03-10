@@ -914,6 +914,7 @@ fn analyze_dependencies(script_content: &str) -> Result<Vec<String>, String> {
 fn is_stdlib_module(module: &str) -> bool {
     // Common Python stdlib modules
     let stdlib_modules = [
+        "__future__",
         "os",
         "sys",
         "re",
