@@ -466,8 +466,8 @@ fn is_stdlib(module: &str) -> bool {
 
 fn force_install_all_requirements() -> bool {
     env::var("SR_FORCE_INSTALL_ALL_REQUIREMENTS")
-        .map(|v| v != "0")
-        .unwrap_or(false)
+    .map(|v| v != "0")
+    .unwrap_or(true)
 }
 
 fn requirements_to_packages(content: &str, include_stdlib: bool) -> Vec<String> {
@@ -578,6 +578,11 @@ pub async fn ensure_requirements(
         .map_err(|e| format!("Failed to read requirements.txt: {}", e))?;
 
     let include_stdlib = force_install_all_requirements();
+    if include_stdlib {
+        log::info!(
+            "SR_FORCE_INSTALL_ALL_REQUIREMENTS active: installing all entries from requirements.txt"
+        );
+    }
     let packages = requirements_to_packages(&content, include_stdlib);
 
     if packages.is_empty() {
@@ -669,6 +674,12 @@ pub async fn ensure_all_scripts_requirements(
             match fs::read_to_string(&req_path) {
                 Ok(content) => {
                     let include_stdlib = force_install_all_requirements();
+                    if include_stdlib {
+                        log::info!(
+                            "SR_FORCE_INSTALL_ALL_REQUIREMENTS active: aggregating all requirements for {}",
+                            dir.display()
+                        );
+                    }
                     for package in requirements_to_packages(&content, include_stdlib) {
                         aggregated.insert(package);
                     }
