@@ -283,7 +283,11 @@ pub async fn execute_script(
 
     if output.status.success() {
         // On success also return combined so stderr warnings are visible
-        Ok(if combined.is_empty() { stdout } else { combined })
+        if combined.is_empty() {
+            Ok(stdout)
+        } else {
+            Ok(combined)
+        }
     } else {
         let exit_code = output.status.code().unwrap_or(-1);
         if combined.is_empty() {
