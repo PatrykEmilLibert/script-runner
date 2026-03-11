@@ -975,7 +975,8 @@ async fn run_script(
 
     // Run script and iteratively self-heal missing dependency errors.
     let mut result =
-        python_runner::execute_script(&script_path, &state.python_exec, args.clone()).await;
+        python_runner::execute_script(&script_name, &script_path, &state.python_exec, args.clone())
+            .await;
     let mut attempted_modules: HashSet<String> = HashSet::new();
     const MAX_AUTO_INSTALL_ATTEMPTS: usize = 20;
 
@@ -1011,8 +1012,13 @@ async fn run_script(
             break;
         }
 
-        result =
-            python_runner::execute_script(&script_path, &state.python_exec, args.clone()).await;
+        result = python_runner::execute_script(
+            &script_name,
+            &script_path,
+            &state.python_exec,
+            args.clone(),
+        )
+        .await;
     }
     let end_time = chrono::Utc::now();
     let duration = end_time.signed_duration_since(start_time);
@@ -1052,6 +1058,11 @@ async fn run_script(
     );
 
     result
+}
+
+#[tauri::command]
+async fn stop_script(script_name: String) -> Result<String, String> {
+    python_runner::stop_script_execution(&script_name)
 }
 
 #[tauri::command]
@@ -1423,6 +1434,7 @@ fn main() {
             create_kill_switch_override,
             sync_scripts,
             run_script,
+            stop_script,
             list_scripts,
             check_script_compatibility,
             get_script_logs,

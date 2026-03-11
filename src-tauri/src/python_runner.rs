@@ -2,12 +2,21 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+
+use std::collections::HashMap;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+static RUNNING_SCRIPT_PIDS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+
+fn running_script_pids() -> &'static Mutex<HashMap<String, u32>> {
+    RUNNING_SCRIPT_PIDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn apply_no_console_window(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
@@ -90,6 +99,7 @@ pub fn check_platform_compatibility(script_content: &str) -> Result<Vec<String>,
 }
 
 pub async fn execute_script(
+    script_name: &str,
     script_path: &PathBuf,
     python_exec: &PathBuf,
     args: Option<Vec<String>>,
@@ -172,9 +182,29 @@ pub async fn execute_script(
         cmd.args(script_args);
     }
 
-    let output = cmd
-        .output()
+    let mut child = cmd
+        .spawn()
         .map_err(|e| format!("Failed to execute script: {}", e))?;
+
+    let pid = child.id();
+    {
+        let mut processes = running_script_pids()
+            .lock()
+            .map_err(|_| "Failed to lock running script process map".to_string())?;
+        processes.insert(script_name.to_string(), pid);
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to execute script: {}", e));
+
+    {
+        if let Ok(mut processes) = running_script_pids().lock() {
+            processes.remove(script_name);
+        }
+    }
+
+    let output = output?;
 
     // Clean up temp file if it was created
     if let Some(temp) = temp_file {
@@ -210,4 +240,55 @@ pub async fn execute_script(
     } else {
         Err(format!("Script failed: {}", stderr))
     }
+}
+
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status()
+            .map_err(|e| format!("Failed to invoke taskkill: {}", e))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("taskkill failed with status {}", status))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let parent_status = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .map_err(|e| format!("Failed to invoke kill: {}", e))?;
+
+        if parent_status.success() {
+            Ok(())
+        } else {
+            Err(format!("kill failed with status {}", parent_status))
+        }
+    }
+}
+
+pub fn stop_script_execution(script_name: &str) -> Result<String, String> {
+    let pid = {
+        let processes = running_script_pids()
+            .lock()
+            .map_err(|_| "Failed to lock running script process map".to_string())?;
+        processes.get(script_name).copied()
+    };
+
+    let Some(pid) = pid else {
+        return Err(format!("Script '{}' is not running", script_name));
+    };
+
+    kill_process_tree(pid)?;
+
+    if let Ok(mut processes) = running_script_pids().lock() {
+        processes.remove(script_name);
+    }
+
+    Ok(format!("Stopped script '{}'", script_name))
 }

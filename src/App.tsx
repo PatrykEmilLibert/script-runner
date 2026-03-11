@@ -352,6 +352,46 @@ export default function App() {
     }
   };
 
+  const handleKillScript = async (scriptName: string) => {
+    try {
+      await invoke<string>("stop_script", { scriptName });
+      setRunningScripts((prev) => {
+        const existing = prev[scriptName];
+        if (!existing) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [scriptName]: {
+            output: `${existing.output}\n[Stopped by user]\n`,
+            isRunning: false,
+          },
+        };
+      });
+      await sendNotification("Script Stopped", `${scriptName} was terminated`, 'warning', {
+        sound: false,
+      });
+    } catch (error) {
+      const errorMsg = `Failed to stop script: ${error}`;
+      setRunningScripts((prev) => {
+        const existing = prev[scriptName];
+        if (!existing) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [scriptName]: {
+            output: `${existing.output}\n${errorMsg}\n`,
+            isRunning: existing.isRunning,
+          },
+        };
+      });
+      await sendNotification("Stop Failed", `${scriptName} could not be terminated`, 'error', {
+        sound: false,
+      });
+    }
+  };
+
   const openScriptFolder = async () => {
     try {
       if (selectedScript) {
@@ -873,20 +913,32 @@ export default function App() {
                                     {data.isRunning ? "Running..." : "Completed"}
                                   </Text>
                                 </div>
-                                <Button
-                                  size="xs"
-                                  variant="light"
-                                  color="pink"
-                                  onClick={() => {
-                                    setRunningScripts(prev => {
-                                      const updated = { ...prev };
-                                      delete updated[scriptName];
-                                      return updated;
-                                    });
-                                  }}
-                                >
-                                  Clear
-                                </Button>
+                                <Group gap="xs">
+                                  {data.isRunning && (
+                                    <Button
+                                      size="xs"
+                                      variant="light"
+                                      color="red"
+                                      onClick={() => handleKillScript(scriptName)}
+                                    >
+                                      Kill
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="xs"
+                                    variant="light"
+                                    color="pink"
+                                    onClick={() => {
+                                      setRunningScripts(prev => {
+                                        const updated = { ...prev };
+                                        delete updated[scriptName];
+                                        return updated;
+                                      });
+                                    }}
+                                  >
+                                    Clear
+                                  </Button>
+                                </Group>
                               </Group>
                             </div>
                             <pre className="p-4 overflow-auto max-h-96 text-sm font-mono bg-gray-50 dark:bg-gray-900 white-space-pre-wrap break-words">
@@ -1261,20 +1313,32 @@ export default function App() {
                                   {data.isRunning ? "Running..." : "Completed"}
                                 </Text>
                               </div>
-                              <Button
-                                size="xs"
-                                variant="light"
-                                color="pink"
-                                onClick={() => {
-                                  setRunningScripts(prev => {
-                                    const updated = { ...prev };
-                                    delete updated[scriptName];
-                                    return updated;
-                                  });
-                                }}
-                              >
-                                Clear
-                              </Button>
+                              <Group gap="xs">
+                                {data.isRunning && (
+                                  <Button
+                                    size="xs"
+                                    variant="light"
+                                    color="red"
+                                    onClick={() => handleKillScript(scriptName)}
+                                  >
+                                    Kill
+                                  </Button>
+                                )}
+                                <Button
+                                  size="xs"
+                                  variant="light"
+                                  color="pink"
+                                  onClick={() => {
+                                    setRunningScripts(prev => {
+                                      const updated = { ...prev };
+                                      delete updated[scriptName];
+                                      return updated;
+                                    });
+                                  }}
+                                >
+                                  Clear
+                                </Button>
+                              </Group>
                             </Group>
                           </div>
                           <pre className="p-4 overflow-auto max-h-96 text-sm font-mono bg-gray-50 dark:bg-gray-900 white-space-pre-wrap break-words">
