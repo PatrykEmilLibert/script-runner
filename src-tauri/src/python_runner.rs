@@ -44,12 +44,27 @@ fn apply_macos_runtime_env(cmd: &mut Command) {
 }
 
 #[cfg(target_os = "macos")]
-const MACOS_VERSION_COMPAT_LAUNCHER: &str = r#"import os, platform, runpy, subprocess, sys
+const MACOS_VERSION_COMPAT_LAUNCHER: &str = r#"import os, platform, plistlib, runpy, subprocess, sys
 os.environ['SYSTEM_VERSION_COMPAT'] = '0'
 
 def _real_macos_version():
+    # Priority 1: read SystemVersion.plist directly — completely immune to
+    # SYSTEM_VERSION_COMPAT, always returns the real marketing version (e.g. 26.x
+    # for macOS 26 Tahoe) even when the Tauri parent binary was compiled with an
+    # old MACOSX_DEPLOYMENT_TARGET that would otherwise trigger compat mode.
     try:
-        return subprocess.check_output(['/usr/bin/sw_vers', '-productVersion'], text=True).strip()
+        with open('/System/Library/CoreServices/SystemVersion.plist', 'rb') as _plist_file:
+            _pdata = plistlib.load(_plist_file)
+        _pver = _pdata.get('ProductVersion', '')
+        if _pver:
+            return _pver
+    except Exception:
+        pass
+    # Fallback: sw_vers subprocess (inherits SYSTEM_VERSION_COMPAT=0 from env)
+    try:
+        return subprocess.check_output(
+            ['/usr/bin/sw_vers', '-productVersion'], text=True
+        ).strip()
     except Exception:
         return None
 
@@ -86,6 +101,24 @@ if _version:
             return os.uname_result((u.sysname, u.nodename, _patched_release(), _patched_version(), u.machine))
 
         os.uname = _patched_uname
+    except Exception:
+        pass
+
+    # Patch sysconfig.get_platform so that pip platform tags and any code using
+    # sysconfig also see the correct macOS version (e.g. macosx-26.0-arm64).
+    try:
+        import re as _re
+        import sysconfig as _sysconfig
+        _orig_get_platform = _sysconfig.get_platform
+
+        def _patched_get_platform():
+            return _re.sub(
+                r'(macosx-)[\d]+\.[\d]+',
+                f'\\g<1>{_major}.{_minor}',
+                _orig_get_platform()
+            )
+
+        _sysconfig.get_platform = _patched_get_platform
     except Exception:
         pass
 
