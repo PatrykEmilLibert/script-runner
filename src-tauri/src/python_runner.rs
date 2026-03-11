@@ -182,7 +182,7 @@ pub async fn execute_script(
         cmd.args(script_args);
     }
 
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| format!("Failed to execute script: {}", e))?;
 

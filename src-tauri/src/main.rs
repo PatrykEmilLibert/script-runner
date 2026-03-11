@@ -1061,7 +1061,7 @@ async fn run_script(
 }
 
 #[tauri::command]
-async fn stop_script(script_name: String) -> Result<String, String> {
+fn stop_script(script_name: String) -> Result<String, String> {
     python_runner::stop_script_execution(&script_name)
 }
 
