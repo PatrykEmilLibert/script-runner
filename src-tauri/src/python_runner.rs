@@ -9,6 +9,9 @@ use std::collections::HashMap;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -289,9 +292,29 @@ pub async fn execute_script(
             Ok(combined)
         }
     } else {
-        let exit_code = output.status.code().unwrap_or(-1);
+        let exit_detail = if let Some(code) = output.status.code() {
+            format!("exit code {}", code)
+        } else {
+            #[cfg(unix)]
+            {
+                if let Some(signal) = output.status.signal() {
+                    format!("terminated by signal {}", signal)
+                } else {
+                    "unknown process termination".to_string()
+                }
+            }
+
+            #[cfg(not(unix))]
+            {
+                "unknown process termination".to_string()
+            }
+        };
+
         if combined.is_empty() {
-            Err(format!("Script failed (exit code {})", exit_code))
+            Err(format!(
+                "Script failed ({}) with no output captured",
+                exit_detail
+            ))
         } else {
             Err(format!("Script failed:\n{}", combined))
         }
