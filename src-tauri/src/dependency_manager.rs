@@ -41,7 +41,7 @@ fn apply_macos_runtime_env(cmd: &mut Command) {
     }
 }
 
-fn apply_python_process_isolation(cmd: &mut Command, python_exec: &PathBuf) {
+fn apply_python_process_isolation(cmd: &mut Command, python_exec: &Path) {
     // Avoid inherited environment poisoning that can redirect stdlib resolution
     // to script folders and break ensurepip/pip bootstrapping.
     for key in [
@@ -213,7 +213,7 @@ fn run_pip_install(
     cmd.args(packages);
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
-    apply_python_process_isolation(&mut cmd, python_exec);
+    apply_python_process_isolation(&mut cmd, python_exec.as_path());
 
     if let Some(dir) = current_dir {
         #[cfg(not(target_os = "windows"))]
@@ -240,7 +240,7 @@ fn run_python_command(
     cmd.args(args);
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
-    apply_python_process_isolation(&mut cmd, python_exec);
+    apply_python_process_isolation(&mut cmd, python_exec.as_path());
 
     if let Some(dir) = current_dir {
         #[cfg(not(target_os = "windows"))]
