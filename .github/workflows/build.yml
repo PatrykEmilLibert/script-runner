@@ -332,6 +332,25 @@ jobs:
           mkdir -p src-tauri
           cp -R -L "$PYTHON_ROOT" src-tauri/python
 
+          # Make bundled python binaries relocatable inside the app bundle.
+          # Official python.org binaries are linked against an absolute
+          # /Library/Frameworks/... path, which does not exist on end-user Macs
+          # unless Python is separately installed system-wide.
+          PY_DYLIB_FROM="/Library/Frameworks/Python.framework/Versions/3.12/Python"
+          for PY_EXE in src-tauri/python/bin/python3.12 src-tauri/python/bin/python3 src-tauri/python/bin/python; do
+            if [ -x "$PY_EXE" ]; then
+              install_name_tool -change "$PY_DYLIB_FROM" "@executable_path/../Python" "$PY_EXE" || true
+            fi
+          done
+
+          if [ -x "src-tauri/python/bin/python3.12" ]; then
+            if otool -L "src-tauri/python/bin/python3.12" | grep -q "$PY_DYLIB_FROM"; then
+              echo "::error::python3.12 still depends on absolute /Library/Frameworks path"
+              otool -L "src-tauri/python/bin/python3.12"
+              exit 1
+            fi
+          fi
+
           if [ -x "src-tauri/python/bin/python3.12" ]; then
             cp -f "src-tauri/python/bin/python3.12" "src-tauri/python/bin/python3"
             cp -f "src-tauri/python/bin/python3.12" "src-tauri/python/bin/python"
