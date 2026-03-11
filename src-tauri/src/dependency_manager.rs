@@ -41,6 +41,27 @@ fn apply_macos_runtime_env(cmd: &mut Command) {
     }
 }
 
+fn apply_python_process_isolation(cmd: &mut Command, python_exec: &PathBuf) {
+    // Avoid inherited environment poisoning that can redirect stdlib resolution
+    // to script folders and break ensurepip/pip bootstrapping.
+    for key in [
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "PYTHONEXECUTABLE",
+        "__PYVENV_LAUNCHER__",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    // Ensure interpreter bootstrap runs in a stable location near python.exe,
+    // not in a potentially hostile script directory containing pyvenv.cfg/Lib.
+    if let Some(parent) = python_exec.parent() {
+        cmd.current_dir(parent);
+    }
+}
+
 // Map import names to pip package names for packages with mismatched names
 // Based on common PyPI package name mismatches
 fn get_import_to_package_map() -> HashMap<&'static str, &'static str> {
@@ -192,9 +213,18 @@ fn run_pip_install(
     cmd.args(packages);
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
+    apply_python_process_isolation(&mut cmd, python_exec);
 
     if let Some(dir) = current_dir {
-        cmd.current_dir(dir);
+        #[cfg(not(target_os = "windows"))]
+        {
+            cmd.current_dir(dir);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = dir;
+        }
     }
 
     cmd.output()
@@ -210,9 +240,18 @@ fn run_python_command(
     cmd.args(args);
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
+    apply_python_process_isolation(&mut cmd, python_exec);
 
     if let Some(dir) = current_dir {
-        cmd.current_dir(dir);
+        #[cfg(not(target_os = "windows"))]
+        {
+            cmd.current_dir(dir);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = dir;
+        }
     }
 
     cmd.output()
