@@ -77,35 +77,11 @@ if _version:
     _parts = [int(p) for p in _version.split('.') if p.isdigit()]
     _major = _parts[0] if _parts else 0
     _minor = _parts[1] if len(_parts) > 1 else 0
-    _micro = _parts[2] if len(_parts) > 2 else 0
 
     def _patched_mac_ver(release='', versioninfo=('', '', ''), machine=''):
         return (_version, ('', '', ''), _machine)
 
-    def _patched_release():
-        return f"{_major}.{_minor}.{_micro}"
-
-    def _patched_version():
-        return _patched_release()
-
-    def _patched_platform(*args, **kwargs):
-        return f"macOS-{_version}-{_machine}"
-
     platform.mac_ver = _patched_mac_ver
-    platform.release = _patched_release
-    platform.version = _patched_version
-    platform.platform = _patched_platform
-
-    try:
-        _orig_uname = os.uname
-
-        def _patched_uname():
-            u = _orig_uname()
-            return os.uname_result((u.sysname, u.nodename, _patched_release(), _patched_version(), u.machine))
-
-        os.uname = _patched_uname
-    except Exception:
-        pass
 
     # Patch sysconfig.get_platform so that pip platform tags and any code using
     # sysconfig also see the correct macOS version (e.g. macosx-26.0-arm64).
