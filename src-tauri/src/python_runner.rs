@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
 
 use std::collections::HashMap;
@@ -34,6 +35,9 @@ fn apply_no_console_window(cmd: &mut Command) {
 }
 
 fn apply_macos_runtime_env(cmd: &mut Command) {
+    cmd.env("PYTHONFAULTHANDLER", "1");
+    cmd.env("PYTHONUNBUFFERED", "1");
+
     #[cfg(target_os = "macos")]
     {
         // Ensure Python sees the actual macOS version (not legacy compatibility 10.16).
@@ -185,6 +189,9 @@ pub async fn execute_script(
 
     apply_no_console_window(&mut cmd);
     apply_macos_runtime_env(&mut cmd);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(script_dir) = script_path.parent() {
         cmd.current_dir(script_dir);
     }
@@ -287,10 +294,16 @@ pub async fn execute_script(
         };
 
         if combined.is_empty() {
-            Err(format!(
-                "Script failed ({}) with no output captured",
-                exit_detail
-            ))
+            let mut message = format!("Script failed ({}) with no output captured", exit_detail);
+
+            #[cfg(unix)]
+            {
+                if output.status.signal() == Some(6) {
+                    message.push_str(". Process aborted (SIGABRT) before writing stdout/stderr; this often indicates a Python runtime/bootstrap crash on macOS.");
+                }
+            }
+
+            Err(message)
         } else {
             Err(format!("Script failed:\n{}", combined))
         }
