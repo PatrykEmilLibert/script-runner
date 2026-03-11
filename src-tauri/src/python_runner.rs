@@ -268,10 +268,29 @@ pub async fn execute_script(
         }
     }
 
+    // Combine stdout and stderr for display: many scripts print errors to stdout
+    // (not stderr), so discarding stdout on failure would hide all error context.
+    let combined = {
+        let s = stdout.trim_end();
+        let e = stderr.trim_end();
+        match (s.is_empty(), e.is_empty()) {
+            (false, false) => format!("{}\n{}", s, e),
+            (false, true) => stdout.clone(),
+            (true, false) => stderr.clone(),
+            (true, true) => String::new(),
+        }
+    };
+
     if output.status.success() {
-        Ok(stdout)
+        // On success also return combined so stderr warnings are visible
+        Ok(if combined.is_empty() { stdout } else { combined })
     } else {
-        Err(format!("Script failed: {}", stderr))
+        let exit_code = output.status.code().unwrap_or(-1);
+        if combined.is_empty() {
+            Err(format!("Script failed (exit code {})", exit_code))
+        } else {
+            Err(format!("Script failed:\n{}", combined))
+        }
     }
 }
 
