@@ -674,6 +674,36 @@ fn isolated_python_exec_path(venv_dir: &Path) -> PathBuf {
     }
 }
 
+fn venv_base_marker_path(venv_dir: &Path) -> PathBuf {
+    venv_dir.join(".sr_base_python")
+}
+
+fn normalize_path_for_compare(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn write_venv_base_marker(venv_dir: &Path, base_python: &Path) {
+    let marker_path = venv_base_marker_path(venv_dir);
+    let normalized = normalize_path_for_compare(base_python);
+    let _ = fs::write(marker_path, normalized.to_string_lossy().to_string());
+}
+
+fn is_existing_venv_compatible(venv_dir: &Path, base_python: &Path) -> bool {
+    let marker_path = venv_base_marker_path(venv_dir);
+    let marker_value = match fs::read_to_string(&marker_path) {
+        Ok(content) => content.trim().to_string(),
+        Err(_) => return false,
+    };
+
+    if marker_value.is_empty() {
+        return false;
+    }
+
+    let expected = normalize_path_for_compare(base_python);
+    let expected_value = expected.to_string_lossy().to_string();
+    marker_value == expected_value
+}
+
 fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
     let venv_dir = dirs::data_dir()
         .unwrap_or_else(std::env::temp_dir)
@@ -683,7 +713,14 @@ fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
 
     let venv_python = isolated_python_exec_path(&venv_dir);
     if venv_python.exists() && is_python_exec_usable(&venv_python) {
-        return venv_python;
+        if is_existing_venv_compatible(&venv_dir, base_python) {
+            return venv_python;
+        }
+
+        log::warn!(
+            "Existing isolated Python environment is from a different base interpreter; recreating venv at {}",
+            venv_dir.display()
+        );
     }
 
     if let Some(parent) = venv_dir.parent() {
@@ -704,6 +741,7 @@ fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
     match cmd.output() {
         Ok(output) if output.status.success() => {
             if venv_python.exists() && is_python_exec_usable(&venv_python) {
+                write_venv_base_marker(&venv_dir, base_python);
                 log::info!(
                     "Using isolated app Python environment: {}",
                     venv_python.display()
