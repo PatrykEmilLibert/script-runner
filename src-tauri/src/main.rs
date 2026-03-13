@@ -807,6 +807,25 @@ fn extract_missing_module_name(python_error: &str) -> Option<String> {
     None
 }
 
+fn extract_recoverable_dependency(python_error: &str) -> Option<String> {
+    if let Some(module) = extract_missing_module_name(python_error) {
+        return Some(module);
+    }
+
+    let lower = python_error.to_lowercase();
+
+    // pyautogui/pyscreeze requires OpenCV for confidence-based locate APIs.
+    if lower.contains("confidence keyword argument is only available if opencv is installed")
+        || (lower.contains("pyautogui")
+            && lower.contains("confidence")
+            && lower.contains("opencv"))
+    {
+        return Some("opencv-python".to_string());
+    }
+
+    None
+}
+
 #[tauri::command]
 async fn check_kill_switch() -> Result<bool, String> {
     // Check local override first
@@ -983,7 +1002,7 @@ async fn run_script(
     for _ in 0..MAX_AUTO_INSTALL_ATTEMPTS {
         let missing_module = match &result {
             Ok(_) => None,
-            Err(error_text) => extract_missing_module_name(error_text),
+            Err(error_text) => extract_recoverable_dependency(error_text),
         };
 
         let Some(module_name) = missing_module else {

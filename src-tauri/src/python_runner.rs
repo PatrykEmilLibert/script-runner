@@ -240,8 +240,20 @@ pub async fn execute_script(
             .unwrap()
             .join(format!("{}.log", script_name.to_string_lossy()));
         if let Ok(mut file) = File::create(&log_path) {
+            let cwd = script_path
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<unknown>".to_string());
             let _ = writeln!(file, "=== Script Output ===\n{}\n", stdout);
             let _ = writeln!(file, "=== Errors ===\n{}\n", stderr);
+            let _ = writeln!(
+                file,
+                "=== Execution Context ===\npython_exec: {}\nscript_path: {}\ncwd: {}\nos: {}\n",
+                python_exec.display(),
+                script_to_execute.display(),
+                cwd,
+                std::env::consts::OS
+            );
             let _ = writeln!(
                 file,
                 "=== Status ===\n{}\n",
@@ -305,7 +317,30 @@ pub async fn execute_script(
 
             Err(message)
         } else {
-            Err(format!("Script failed:\n{}", combined))
+            let mut message = format!(
+                "Script failed (python: {}):\n{}",
+                python_exec.display(),
+                combined
+            );
+
+            if combined.contains("confidence keyword argument is only available if OpenCV is installed")
+            {
+                message.push_str(
+                    "\n\nHint: This runtime is missing OpenCV. Install `opencv-python` in the same Python used by Script Runner.",
+                );
+            }
+
+            if combined.contains("pyautogui")
+                && (combined.contains("screenshot")
+                    || combined.contains("Screen")
+                    || combined.contains("capture"))
+            {
+                message.push_str(
+                    "\n\nHint: Image search/screenshot can fail when app-level screen permissions are missing. Verify Screen Recording/Accessibility permissions for Script Runner (and for its Python runtime).",
+                );
+            }
+
+            Err(message)
         }
     }
 }

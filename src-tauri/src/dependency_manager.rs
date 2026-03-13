@@ -589,15 +589,24 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     let mut imports = HashSet::new();
     let import_map = get_import_to_package_map();
 
-    // Regex for: import X, import X as Y, from X import Y
-    let import_re = Regex::new(r"^(?:from\s+(\S+)|import\s+(\S+))").unwrap();
+    // Regex patterns for:
+    // - import X, import X as Y, from X import Y (including indented/conditional imports)
+    // - Handles: if/try/except/with/def/class blocks, comments, etc.
+    let import_re = Regex::new(r"(?:^|\s)(?:from\s+(\S+)|import\s+(\S+))").unwrap();
 
     for line in content.lines() {
+        // Skip empty lines
         let trimmed = line.trim();
-        if trimmed.starts_with("#") || trimmed.is_empty() {
+        if trimmed.is_empty() {
             continue;
         }
 
+        // Skip comment-only lines
+        if trimmed.starts_with("#") {
+            continue;
+        }
+
+        // Extract import statements, even if indented (handles if/try/except/with blocks)
         if let Some(caps) = import_re.captures(trimmed) {
             let module = caps
                 .get(1)
@@ -613,6 +622,32 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
                 let package_name = import_map.get(root_module).copied().unwrap_or(root_module);
                 imports.insert(package_name.to_string());
             }
+        }
+    }
+
+    // Heuristic: pyautogui image matching with confidence requires OpenCV.
+    // Many scripts do not import cv2 directly, so import-based detection misses it.
+    if content.contains("pyautogui")
+        && (content.contains("locateOnScreen(")
+            || content.contains("locateCenterOnScreen(")
+            || content.contains("locateAllOnScreen("))
+        && content.contains("confidence=")
+    {
+        imports.insert("opencv-python".to_string());
+        log::info!(
+            "Detected pyautogui image search with confidence; added opencv-python dependency"
+        );
+    }
+
+    // On Windows, automatically include pywin32-related packages if any win32 modules are detected
+    #[cfg(target_os = "windows")]
+    {
+        let win32_modules = vec!["win32api", "win32con", "win32gui", "win32process", "pythoncom", "pywintypes", "win32com"];
+        let has_win32_module = win32_modules.iter().any(|m| imports.contains(&m.to_string()));
+        
+        if has_win32_module {
+            imports.insert("pywin32".to_string());
+            log::info!("Detected Windows-specific modules; added pywin32 to dependencies");
         }
     }
 
@@ -716,6 +751,45 @@ pub async fn ensure_requirements(
         error_msg.push_str(&format!("\n📋 Full error:\n{}\n{}", stdout, stderr));
 
         return Err(error_msg);
+    }
+
+    // Post-install hooks for packages that require special setup
+    #[cfg(target_os = "windows")]
+    {
+        if packages.contains(&"pywin32".to_string()) {
+            // pywin32 requires post-install script execution on Windows
+            log::info!("Running pywin32 post-install setup...");
+            let setup_script = r#"
+import sys
+try:
+    import pywin32_postinstall
+    pywin32_postinstall.install()
+except Exception as e:
+    # Non-critical failure; pywin32 may still work
+    print(f"Warning: pywin32 post-install setup failed: {e}")
+    sys.exit(0)
+"#;
+            
+            let pywin_output = run_python_command(
+                python_exec,
+                &["-c", setup_script],
+                Some(script_dir),
+            );
+            
+            match pywin_output {
+                Ok(output) => {
+                    if output.status.success() {
+                        log::info!("pywin32 post-install completed successfully");
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        log::warn!("pywin32 post-install had issues: {}", stderr);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Could not run pywin32 post-install: {}", e);
+                }
+            }
+        }
     }
 
     // Cache hash to avoid reinstalling unchanged deps

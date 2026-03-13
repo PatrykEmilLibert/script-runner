@@ -29,8 +29,20 @@ STDLIB_MODULES = {
     'enum', 'numbers', 'cmath', 'decimal', 'fractions', 'statistics', 'array',
 }
 
+# Windows-specific modules that have different package names
+WINDOWS_MODULES = {
+    'pythoncom': 'pywin32',
+    'pywintypes': 'pywin32',
+    'win32api': 'pywin32',
+    'win32con': 'pywin32',
+    'win32gui': 'pywin32',
+    'win32process': 'pywin32',
+    'win32com': 'pywin32',
+}
+
+
 def extract_imports(file_path: str) -> set:
-    """Extract all non-stdlib imports from a Python file"""
+    """Extract all non-stdlib imports from a Python file, including conditional imports"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             tree = ast.parse(f.read())
@@ -39,6 +51,8 @@ def extract_imports(file_path: str) -> set:
     
     imports = set()
     
+    # Recursively walk all AST nodes to capture imports in any context
+    # (if blocks, try-except, functions, classes, with blocks, etc.)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -61,6 +75,13 @@ def main():
     script_path = sys.argv[1]
     imports = extract_imports(script_path)
     
+    # Map detected modules to actual package names (e.g., pythoncom -> pywin32)
+    packages = set()
+    for module in imports:
+        # Check if this module has a special package name mapping
+        package = WINDOWS_MODULES.get(module, module)
+        packages.add(package)
+    
     # Check for requirements.txt in same directory
     req_file = Path(script_path).parent / "requirements.txt"
     if req_file.exists():
@@ -70,11 +91,11 @@ def main():
                     line = line.strip()
                     if line and not line.startswith('#'):
                         package = line.split('==')[0].split('>=')[0].split('<=')[0].strip()
-                        imports.add(package)
+                        packages.add(package)
         except Exception:
             pass
     
-    print(json.dumps({"packages": list(imports)}))
+    print(json.dumps({"packages": list(packages)}))
 
 if __name__ == "__main__":
     main()
