@@ -642,9 +642,17 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     // On Windows, automatically include pywin32-related packages if any win32 modules are detected
     #[cfg(target_os = "windows")]
     {
-        let win32_modules = vec!["win32api", "win32con", "win32gui", "win32process", "pythoncom", "pywintypes", "win32com"];
+        let win32_modules = vec![
+            "win32api",
+            "win32con",
+            "win32gui",
+            "win32process",
+            "pythoncom",
+            "pywintypes",
+            "win32com",
+        ];
         let has_win32_module = win32_modules.iter().any(|m| imports.contains(&m.to_string()));
-        
+
         if has_win32_module {
             imports.insert("pywin32".to_string());
             log::info!("Detected Windows-specific modules; added pywin32 to dependencies");

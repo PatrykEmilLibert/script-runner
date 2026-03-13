@@ -323,7 +323,8 @@ pub async fn execute_script(
                 combined
             );
 
-            if combined.contains("confidence keyword argument is only available if OpenCV is installed")
+            if combined
+                .contains("confidence keyword argument is only available if OpenCV is installed")
             {
                 message.push_str(
                     "\n\nHint: This runtime is missing OpenCV. Install `opencv-python` in the same Python used by Script Runner.",
