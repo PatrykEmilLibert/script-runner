@@ -651,7 +651,9 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
             "pywintypes",
             "win32com",
         ];
-        let has_win32_module = win32_modules.iter().any(|m| imports.contains(&m.to_string()));
+        let has_win32_module = win32_modules
+            .iter()
+            .any(|m| imports.contains(&m.to_string()));
 
         if has_win32_module {
             imports.insert("pywin32".to_string());
@@ -777,13 +779,10 @@ except Exception as e:
     print(f"Warning: pywin32 post-install setup failed: {e}")
     sys.exit(0)
 "#;
-            
-            let pywin_output = run_python_command(
-                python_exec,
-                &["-c", setup_script],
-                Some(script_dir),
-            );
-            
+
+            let pywin_output =
+                run_python_command(python_exec, &["-c", setup_script], Some(script_dir));
+
             match pywin_output {
                 Ok(output) => {
                     if output.status.success() {

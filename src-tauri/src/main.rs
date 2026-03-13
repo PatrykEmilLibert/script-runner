@@ -816,9 +816,7 @@ fn extract_recoverable_dependency(python_error: &str) -> Option<String> {
 
     // pyautogui/pyscreeze requires OpenCV for confidence-based locate APIs.
     if lower.contains("confidence keyword argument is only available if opencv is installed")
-        || (lower.contains("pyautogui")
-            && lower.contains("confidence")
-            && lower.contains("opencv"))
+        || (lower.contains("pyautogui") && lower.contains("confidence") && lower.contains("opencv"))
     {
         return Some("opencv-python".to_string());
     }
