@@ -308,10 +308,37 @@ fn resolve_scripts_dir() -> PathBuf {
         );
     }
 
-    if let Some(install_adjacent) = resolve_install_adjacent_scripts_dir() {
+    let install_adjacent = resolve_install_adjacent_scripts_dir();
+
+    // Use user data directory first (persistent across updates)
+    if let Some(data_dir) = dirs::data_dir() {
+        let app_data = data_dir.join("ScriptRunner").join("scripts");
+        if is_directory_writable(&app_data) {
+            if let Some(install_adjacent) = install_adjacent.as_ref() {
+                if let Err(e) =
+                    migrate_install_adjacent_scripts_if_needed(install_adjacent, &app_data)
+                {
+                    log::warn!(
+                        "Could not migrate install-adjacent scripts to user data directory: {}",
+                        e
+                    );
+                }
+            }
+
+            log::info!("Using user data directory for scripts: {:?}", app_data);
+            return app_data;
+        }
+
+        log::warn!(
+            "User data scripts directory is not writable, skipping: {:?}",
+            app_data
+        );
+    }
+
+    if let Some(install_adjacent) = install_adjacent {
         if is_directory_writable(&install_adjacent) {
             log::info!(
-                "Using install-adjacent directory for scripts: {:?}",
+                "Using install-adjacent directory for scripts (fallback): {:?}",
                 install_adjacent
             );
             return install_adjacent;
@@ -323,20 +350,6 @@ fn resolve_scripts_dir() -> PathBuf {
         );
     }
 
-    // Use user data directory (persistent across updates)
-    if let Some(data_dir) = dirs::data_dir() {
-        let app_data = data_dir.join("ScriptRunner").join("scripts");
-        if is_directory_writable(&app_data) {
-            log::info!("Using user data directory for scripts: {:?}", app_data);
-            return app_data;
-        }
-
-        log::warn!(
-            "User data scripts directory is not writable, skipping: {:?}",
-            app_data
-        );
-    }
-
     // Final fallback (should rarely happen)
     let local_fallback = PathBuf::from("./scripts");
     log::warn!(
@@ -344,6 +357,71 @@ fn resolve_scripts_dir() -> PathBuf {
         local_fallback
     );
     local_fallback
+}
+
+fn migrate_install_adjacent_scripts_if_needed(
+    install_adjacent: &Path,
+    user_data_scripts: &Path,
+) -> Result<(), String> {
+    if !install_adjacent.exists() {
+        return Ok(());
+    }
+
+    if install_adjacent == user_data_scripts {
+        return Ok(());
+    }
+
+    copy_missing_files_recursively(install_adjacent, user_data_scripts)?;
+    Ok(())
+}
+
+fn copy_missing_files_recursively(source: &Path, target: &Path) -> Result<(), String> {
+    if !source.exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(target).map_err(|e| {
+        format!(
+            "Failed to create target scripts directory {:?}: {}",
+            target, e
+        )
+    })?;
+
+    let entries = fs::read_dir(source).map_err(|e| {
+        format!(
+            "Failed to read source scripts directory {:?}: {}",
+            source, e
+        )
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("Failed to read metadata for {:?}: {}", source_path, e))?;
+
+        if metadata.is_dir() {
+            copy_missing_files_recursively(&source_path, &target_path)?;
+            continue;
+        }
+
+        if metadata.is_file() && !target_path.exists() {
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create directory {:?}: {}", parent, e))?;
+            }
+            fs::copy(&source_path, &target_path).map_err(|e| {
+                format!(
+                    "Failed to copy scripts file from {:?} to {:?}: {}",
+                    source_path, target_path, e
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 fn resolve_install_adjacent_scripts_dir() -> Option<PathBuf> {
