@@ -160,6 +160,36 @@ fn is_newer_version(latest: &str, current: &str) -> bool {
     false
 }
 
+async fn fetch_latest_updater_version() -> Result<Option<String>, String> {
+    let endpoint = updater_endpoint();
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(&endpoint)
+        .header("User-Agent", "ScriptRunner")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch updater metadata: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Updater metadata returned status: {}",
+            response.status()
+        ));
+    }
+
+    let json = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse updater metadata: {}", e))?;
+
+    Ok(json
+        .get("version")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty()))
+}
+
 fn updater_endpoint() -> String {
     if let Some(runtime) = read_non_empty_env("SR_UPDATER_ENDPOINT") {
         return runtime;
@@ -1424,46 +1454,43 @@ fn get_app_instance_id() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn check_for_updates() -> Result<bool, String> {
+async fn check_for_updates(app: tauri::AppHandle) -> Result<bool, String> {
     const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-    let latest_url = releases_latest_api_url();
-
-    let client = reqwest::Client::new();
-
-    match client
-        .get(&latest_url)
-        .header("User-Agent", "ScriptRunner")
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if !response.status().is_success() {
-                log::warn!("GitHub API returned status: {}", response.status());
-                return Ok(false);
-            }
-
-            match response.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
-                        let latest = tag.trim_start_matches('v');
-                        log::info!(
-                            "Current version: {}, Latest version: {}",
-                            CURRENT_VERSION,
-                            latest
-                        );
-                        Ok(is_newer_version(latest, CURRENT_VERSION))
-                    } else {
-                        Ok(false)
-                    }
-                }
-                Err(e) => {
-                    log::warn!("Failed to parse GitHub response: {}", e);
-                    Ok(false)
-                }
-            }
+    match check_runtime_update(app).await {
+        Ok(Some(update)) => {
+            log::info!(
+                "Update available via runtime updater. Current: {}, Latest: {}",
+                update.current_version,
+                update.version
+            );
+            return Ok(true);
+        }
+        Ok(None) => {
+            return Ok(false);
         }
         Err(e) => {
-            log::warn!("Failed to fetch updates from GitHub: {}", e);
+            log::warn!(
+                "Runtime updater check failed, falling back to updater metadata version check: {}",
+                e
+            );
+        }
+    }
+
+    match fetch_latest_updater_version().await {
+        Ok(Some(latest)) => {
+            log::info!(
+                "Fallback updater metadata check. Current version: {}, Latest version: {}",
+                CURRENT_VERSION,
+                latest
+            );
+            Ok(is_newer_version(&latest, CURRENT_VERSION))
+        }
+        Ok(None) => {
+            log::warn!("Updater metadata does not contain a version field.");
+            Ok(false)
+        }
+        Err(e) => {
+            log::warn!("Fallback updater metadata check failed: {}", e);
             Ok(false)
         }
     }
