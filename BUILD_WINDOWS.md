@@ -25,6 +25,10 @@ Required repository secrets:
 Optional for seamless script upload/push without end-user GitHub login:
 - `SR_SCRIPTS_PUSH_TOKEN_B64` (base64-encoded GitHub PAT of technical bot account with access to scripts repo)
 
+Optional for reliable kill-switch checks on all client machines (without admin login):
+- `SR_KILL_SWITCH_URL` (public HTTPS URL returning raw `kill_switch.json`)
+- `SR_KILL_SWITCH_READ_TOKEN` (read-only PAT used only to fetch kill-switch config from private source)
+
 Optional but strongly recommended for fewer Windows Defender / SmartScreen warnings:
 - `WINDOWS_CERTIFICATE` (base64-encoded `.pfx` code-signing certificate)
 - `WINDOWS_CERTIFICATE_PASSWORD`

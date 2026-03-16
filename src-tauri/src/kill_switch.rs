@@ -4,6 +4,12 @@ use std::path::PathBuf;
 
 const CACHE_FILE: &str = "kill_switch_cache.json";
 const CACHE_DURATION_HOURS: i64 = 24;
+const DEFAULT_GITHUB_KILL_SWITCH_API_URL: &str =
+    "https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json";
+const DEFAULT_PUBLIC_KILL_SWITCH_URL: &str =
+    "https://raw.githubusercontent.com/PatrykEmilLibert/script-runner-config/main/kill_switch.json";
+const COMPILED_KILL_SWITCH_URL: Option<&str> = option_env!("SR_KILL_SWITCH_URL");
+const COMPILED_KILL_SWITCH_READ_TOKEN: Option<&str> = option_env!("SR_KILL_SWITCH_READ_TOKEN");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -52,6 +58,95 @@ fn resolve_github_token() -> Option<String> {
     None
 }
 
+fn resolve_kill_switch_read_token() -> Option<String> {
+    if let Some(token) = resolve_github_token() {
+        return Some(token);
+    }
+
+    if let Ok(token) = std::env::var("SR_KILL_SWITCH_READ_TOKEN") {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    COMPILED_KILL_SWITCH_READ_TOKEN
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(str::to_string)
+}
+
+fn resolve_primary_kill_switch_url() -> Option<String> {
+    if let Ok(url) = std::env::var("SR_KILL_SWITCH_URL") {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    COMPILED_KILL_SWITCH_URL
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .map(str::to_string)
+}
+
+fn candidate_kill_switch_urls() -> Vec<String> {
+    let mut urls = Vec::new();
+
+    if let Some(primary) = resolve_primary_kill_switch_url() {
+        urls.push(primary);
+    }
+
+    urls.push(DEFAULT_GITHUB_KILL_SWITCH_API_URL.to_string());
+    urls.push(DEFAULT_PUBLIC_KILL_SWITCH_URL.to_string());
+
+    urls
+}
+
+async fn fetch_config_from_url(
+    client: &reqwest::Client,
+    url: &str,
+    read_token: Option<&str>,
+) -> Result<KillSwitchConfig, String> {
+    let mut request = client
+        .get(url)
+        .header("Accept", "application/vnd.github.v3.raw")
+        .header("User-Agent", "ScriptRunner-App")
+        .timeout(std::time::Duration::from_secs(6));
+
+    if let Some(token) = read_token {
+        request = request.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("{} (source: {})", e, url))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let response_body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "HTTP {} from {}{}",
+            status,
+            url,
+            if response_body.is_empty() {
+                String::new()
+            } else {
+                format!(". Body: {}", response_body)
+            }
+        ));
+    }
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed reading body from {}: {}", url, e))?;
+
+    serde_json::from_str::<KillSwitchConfig>(&text)
+        .map_err(|e| format!("Invalid JSON from {}: {}", url, e))
+}
+
 /// Legacy function for backward compatibility
 pub async fn check_remote_status() -> Result<bool, String> {
     match check_remote_status_advanced().await {
@@ -66,70 +161,40 @@ pub async fn check_remote_status() -> Result<bool, String> {
 /// Fetches full kill switch configuration from GitHub
 pub async fn check_remote_status_advanced() -> Result<KillSwitchConfig, String> {
     let client = reqwest::Client::new();
+    let read_token = resolve_kill_switch_read_token();
+    let mut last_error: Option<String> = None;
 
-    let mut request = client
-        .get("https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json")
-        .header("Accept", "application/vnd.github.v3.raw")
-        .header("User-Agent", "ScriptRunner-App")
-        .timeout(std::time::Duration::from_secs(5));
-
-    if let Some(token) = resolve_github_token() {
-        request = request.header("Authorization", format!("Bearer {}", token));
-    }
-
-    match request.send().await {
-        Ok(response) => {
-            if !response.status().is_success() {
-                log::warn!("Kill switch fetch returned status {}", response.status());
-                if let Some(cached) = get_cached_status() {
-                    log::info!("Using cached kill switch status after API error");
-                    return Ok(cached);
-                }
-                return Ok(KillSwitchConfig::default());
+    for url in candidate_kill_switch_urls() {
+        match fetch_config_from_url(&client, &url, read_token.as_deref()).await {
+            Ok(mut config) => {
+                config.cached_at = Some(chrono::Utc::now().to_rfc3339());
+                let _ = cache_kill_switch_status(&config);
+                log::info!("Kill switch config loaded from {}", url);
+                return Ok(config);
             }
-
-            match response.text().await {
-                Ok(text) => {
-                    match serde_json::from_str::<KillSwitchConfig>(&text) {
-                        Ok(mut config) => {
-                            // Cache successful fetch
-                            config.cached_at = Some(chrono::Utc::now().to_rfc3339());
-                            let _ = cache_kill_switch_status(&config);
-                            Ok(config)
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to parse kill switch config: {}", e);
-                            // Try to use cached version
-                            if let Some(cached) = get_cached_status() {
-                                log::info!("Using cached kill switch status");
-                                Ok(cached)
-                            } else {
-                                Ok(KillSwitchConfig::default())
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::warn!("Failed to read kill switch response: {}", e);
-                    if let Some(cached) = get_cached_status() {
-                        log::info!("Using cached kill switch status");
-                        Ok(cached)
-                    } else {
-                        Ok(KillSwitchConfig::default())
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            log::warn!("No internet connection or kill switch unreachable: {}", e);
-            if let Some(cached) = get_cached_status() {
-                log::info!("Using cached kill switch status (offline mode)");
-                Ok(cached)
-            } else {
-                Ok(KillSwitchConfig::default())
+            Err(err) => {
+                log::warn!("Kill switch source unavailable: {}", err);
+                last_error = Some(err);
             }
         }
     }
+
+    if let Some(cached) = get_cached_status() {
+        log::info!("Using cached kill switch status after remote fetch failure");
+        return Ok(cached);
+    }
+
+    if read_token.is_none() {
+        log::warn!(
+            "Kill switch fetched with no token. Configure SR_KILL_SWITCH_URL (public JSON) or SR_KILL_SWITCH_READ_TOKEN for private config repo access."
+        );
+    }
+
+    if let Some(err) = last_error {
+        log::warn!("No kill switch source succeeded: {}", err);
+    }
+
+    Ok(KillSwitchConfig::default())
 }
 
 /// Checks if the current machine is whitelisted

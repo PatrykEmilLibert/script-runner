@@ -20,6 +20,8 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
       SR_SCRIPTS_PUSH_TOKEN_B64: ${{ secrets.SR_SCRIPTS_PUSH_TOKEN_B64 }}
+      SR_KILL_SWITCH_URL: ${{ secrets.SR_KILL_SWITCH_URL }}
+      SR_KILL_SWITCH_READ_TOKEN: ${{ secrets.SR_KILL_SWITCH_READ_TOKEN }}
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
@@ -147,6 +149,8 @@ jobs:
           SR_UPDATER_PUBKEY: ${{ env.TAURI_UPDATER_PUBLIC_KEY }}
           SR_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
           SR_RELEASES_REPO: ${{ github.repository }}
+          SR_KILL_SWITCH_URL: ${{ env.SR_KILL_SWITCH_URL }}
+          SR_KILL_SWITCH_READ_TOKEN: ${{ env.SR_KILL_SWITCH_READ_TOKEN }}
         run: |
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW -and $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW.Trim().Length -gt 0) {
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW
@@ -276,6 +280,8 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
       SR_SCRIPTS_PUSH_TOKEN_B64: ${{ secrets.SR_SCRIPTS_PUSH_TOKEN_B64 }}
+      SR_KILL_SWITCH_URL: ${{ secrets.SR_KILL_SWITCH_URL }}
+      SR_KILL_SWITCH_READ_TOKEN: ${{ secrets.SR_KILL_SWITCH_READ_TOKEN }}
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -410,6 +416,8 @@ jobs:
           SR_UPDATER_PUBKEY: ${{ env.TAURI_UPDATER_PUBLIC_KEY }}
           SR_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
           SR_RELEASES_REPO: ${{ github.repository }}
+          SR_KILL_SWITCH_URL: ${{ env.SR_KILL_SWITCH_URL }}
+          SR_KILL_SWITCH_READ_TOKEN: ${{ env.SR_KILL_SWITCH_READ_TOKEN }}
         run: |
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW" ]; then
             export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$TAURI_SIGNING_PRIVATE_KEY_PASSWORD_RAW"

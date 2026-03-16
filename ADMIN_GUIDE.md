@@ -135,6 +135,13 @@ The Admin Panel displays:
 2. Ensure token has required repo permissions
 3. Check connectivity to config repository
 
+### Kill Switch Works Only on Admin Machine
+
+If non-admin clients do not respect kill switch state:
+1. Configure `SR_KILL_SWITCH_URL` in production builds to a public URL serving raw `kill_switch.json`
+2. If config source must stay private, provide read-only `SR_KILL_SWITCH_READ_TOKEN` during build/runtime
+3. Rebuild/redeploy client app so all machines use the same kill-switch read source
+
 ---
 
 ## 📋 Admin Checklist
