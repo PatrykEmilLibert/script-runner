@@ -547,13 +547,13 @@ fn copy_directory_recursive(source: &Path, target: &Path) -> Result<(), String> 
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_writable_python_exec(candidate: &PathBuf) -> PathBuf {
+fn resolve_writable_python_exec(candidate: &Path) -> PathBuf {
     let Some(runtime_root) = infer_python_runtime_root(candidate) else {
-        return candidate.clone();
+        return candidate.to_path_buf();
     };
 
     if is_path_writable(&runtime_root) {
-        return candidate.clone();
+        return candidate.to_path_buf();
     }
 
     let data_root = dirs::data_dir()
@@ -600,7 +600,7 @@ fn resolve_writable_python_exec(candidate: &PathBuf) -> PathBuf {
                     "Copied Python runtime is not usable, falling back to original runtime: {}",
                     candidate.display()
                 );
-                candidate.clone()
+                candidate.to_path_buf()
             }
         }
         Err(e) => {
@@ -609,7 +609,7 @@ fn resolve_writable_python_exec(candidate: &PathBuf) -> PathBuf {
                 e,
                 candidate.display()
             );
-            candidate.clone()
+            candidate.to_path_buf()
         }
     }
 }
@@ -691,7 +691,7 @@ fn is_python_runtime_healthy(candidate: &PathBuf) -> bool {
 fn isolated_python_exec_path(venv_dir: &Path) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        return venv_dir.join("Scripts").join("python.exe");
+        venv_dir.join("Scripts").join("python.exe")
     }
 
     #[cfg(not(target_os = "windows"))]

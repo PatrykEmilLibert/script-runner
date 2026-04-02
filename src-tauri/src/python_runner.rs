@@ -306,14 +306,26 @@ pub async fn execute_script(
         };
 
         if combined.is_empty() {
-            let mut message = format!("Script failed ({}) with no output captured", exit_detail);
+            let message = {
+                let base = format!("Script failed ({}) with no output captured", exit_detail);
 
-            #[cfg(unix)]
-            {
-                if output.status.signal() == Some(6) {
-                    message.push_str(". Process aborted (SIGABRT) before writing stdout/stderr; this often indicates a Python runtime/bootstrap crash on macOS.");
+                #[cfg(unix)]
+                {
+                    if output.status.signal() == Some(6) {
+                        format!(
+                            "{}. Process aborted (SIGABRT) before writing stdout/stderr; this often indicates a Python runtime/bootstrap crash on macOS.",
+                            base
+                        )
+                    } else {
+                        base
+                    }
                 }
-            }
+
+                #[cfg(not(unix))]
+                {
+                    base
+                }
+            };
 
             Err(message)
         } else {
