@@ -11,6 +11,7 @@ fn count_scripts(scripts_dir: &PathBuf) -> usize {
 
     let official_root = scripts_dir.join("official");
     let user_root = script_manager::get_user_scripts_root(scripts_dir.as_path());
+    let legacy_user_root = script_manager::get_legacy_user_scripts_root(scripts_dir.as_path());
 
     WalkDir::new(scripts_dir)
         .into_iter()
@@ -20,8 +21,9 @@ fn count_scripts(scripts_dir: &PathBuf) -> usize {
             let path = e.path();
             let is_official = path.starts_with(&official_root);
             let is_current_user_script = path.starts_with(&user_root);
+            let is_legacy_user_script = path.starts_with(&legacy_user_root);
 
-            (is_official || is_current_user_script)
+            (is_official || is_current_user_script || is_legacy_user_script)
                 && (path.join("main.py").exists() || path.join("main.py.enc").exists())
         })
         .count()
@@ -138,6 +140,7 @@ pub fn list_available_scripts(scripts_dir: &PathBuf) -> Result<Vec<String>, Stri
 
     let official_root = scripts_dir.join("official");
     let user_root = script_manager::get_user_scripts_root(scripts_dir.as_path());
+    let legacy_user_root = script_manager::get_legacy_user_scripts_root(scripts_dir.as_path());
 
     for entry in WalkDir::new(scripts_dir)
         .into_iter()
@@ -147,8 +150,9 @@ pub fn list_available_scripts(scripts_dir: &PathBuf) -> Result<Vec<String>, Stri
         let path = entry.path();
         let is_official = path.starts_with(&official_root);
         let is_current_user_script = path.starts_with(&user_root);
+        let is_legacy_user_script = path.starts_with(&legacy_user_root);
 
-        if (is_official || is_current_user_script)
+        if (is_official || is_current_user_script || is_legacy_user_script)
             && (path.join("main.py").exists() || path.join("main.py.enc").exists())
         {
             if let Some(name) = entry.file_name().to_str() {

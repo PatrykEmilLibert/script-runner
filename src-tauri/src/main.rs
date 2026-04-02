@@ -72,12 +72,12 @@ fn resolve_script_directory(
     script_name: &str,
     subdir: Option<&str>,
 ) -> Result<PathBuf, String> {
-    let user_dir = script_manager::get_user_script_dir(scripts_root, script_name);
+    let user_dir = script_manager::resolve_existing_user_script_dir(scripts_root, script_name);
     let official_dir = scripts_root.join("official").join(script_name);
 
     match subdir {
         Some("scripts") => {
-            if user_dir.exists() {
+            if let Some(user_dir) = user_dir {
                 Ok(user_dir)
             } else {
                 Err(format!("User script not found: {}", script_name))
@@ -91,7 +91,7 @@ fn resolve_script_directory(
             }
         }
         _ => {
-            if user_dir.exists() {
+            if let Some(user_dir) = user_dir {
                 Ok(user_dir)
             } else if official_dir.exists() {
                 Ok(official_dir)

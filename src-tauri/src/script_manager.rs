@@ -255,8 +255,30 @@ pub fn get_user_scripts_root(scripts_path: &Path) -> PathBuf {
     scripts_path.join("scripts").join(current_user_namespace())
 }
 
+pub fn get_legacy_user_scripts_root(scripts_path: &Path) -> PathBuf {
+    scripts_path.join("scripts")
+}
+
 pub fn get_user_script_dir(scripts_path: &Path, script_name: &str) -> PathBuf {
     get_user_scripts_root(scripts_path).join(script_name)
+}
+
+pub fn get_legacy_user_script_dir(scripts_path: &Path, script_name: &str) -> PathBuf {
+    get_legacy_user_scripts_root(scripts_path).join(script_name)
+}
+
+pub fn resolve_existing_user_script_dir(scripts_path: &Path, script_name: &str) -> Option<PathBuf> {
+    let namespaced = get_user_script_dir(scripts_path, script_name);
+    if namespaced.exists() {
+        return Some(namespaced);
+    }
+
+    let legacy = get_legacy_user_script_dir(scripts_path, script_name);
+    if legacy.exists() {
+        return Some(legacy);
+    }
+
+    None
 }
 
 #[tauri::command]
@@ -343,7 +365,8 @@ pub async fn delete_script(
     let folder = subdir.unwrap_or_else(|| "scripts".to_string());
     let scripts_path = Path::new(&scripts_dir);
     let script_dir = if folder == "scripts" {
-        get_user_script_dir(scripts_path, &script_name)
+        resolve_existing_user_script_dir(scripts_path, &script_name)
+            .ok_or_else(|| "Script not found".to_string())?
     } else {
         scripts_path.join(&folder).join(&script_name)
     };
@@ -443,54 +466,66 @@ fn collect_scripts_from_subdir(
     scripts_path: &Path,
     subdir: &str,
 ) -> Result<Vec<ScriptInfo>, String> {
-    let (root, path_prefix) = if subdir == "scripts" {
+    let mut result = Vec::new();
+    let mut seen_names = BTreeSet::new();
+
+    let roots: Vec<(PathBuf, String)> = if subdir == "scripts" {
         let namespace = current_user_namespace();
-        (
-            scripts_path.join("scripts").join(&namespace),
-            format!("scripts/{}", namespace),
-        )
+        vec![
+            (
+                scripts_path.join("scripts").join(&namespace),
+                format!("scripts/{}", namespace),
+            ),
+            (scripts_path.join("scripts"), "scripts".to_string()),
+        ]
     } else {
-        (scripts_path.join(subdir), subdir.to_string())
+        vec![(scripts_path.join(subdir), subdir.to_string())]
     };
 
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut result = Vec::new();
-    let entries = fs::read_dir(&root).map_err(|e| format!("Failed to read {}: {}", subdir, e))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read entry in {}: {}", subdir, e))?;
-        let script_dir = entry.path();
-        if !script_dir.is_dir() {
+    for (root, path_prefix) in roots {
+        if !root.exists() {
             continue;
         }
 
-        let script_name = entry.file_name().to_string_lossy().to_string();
-        let main_py = script_dir.join("main.py");
-        let main_enc = script_dir.join("main.py.enc");
-        let encrypted = main_enc.exists();
+        let entries = fs::read_dir(&root)
+            .map_err(|e| format!("Failed to read {}: {}", subdir, e))?;
 
-        if !main_py.exists() && !encrypted {
-            continue;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read entry in {}: {}", subdir, e))?;
+            let script_dir = entry.path();
+            if !script_dir.is_dir() {
+                continue;
+            }
+
+            let script_name = entry.file_name().to_string_lossy().to_string();
+            let main_py = script_dir.join("main.py");
+            let main_enc = script_dir.join("main.py.enc");
+            let encrypted = main_enc.exists();
+
+            if !main_py.exists() && !encrypted {
+                continue;
+            }
+
+            if !seen_names.insert(script_name.clone()) {
+                continue;
+            }
+
+            let metadata = load_script_metadata(&script_dir, &script_name);
+            let source_path = if encrypted { main_enc } else { main_py };
+            let size = fs::metadata(&source_path).map(|m| m.len()).unwrap_or(0);
+
+            result.push(ScriptInfo {
+                name: metadata.name.clone(),
+                subdir: subdir.to_string(),
+                path: format!("{}/{}", path_prefix, script_name),
+                size,
+                modified: metadata.last_modified.clone(),
+                description: metadata.description,
+                author: metadata.author,
+                version: metadata.version,
+                encrypted,
+            });
         }
-
-        let metadata = load_script_metadata(&script_dir, &script_name);
-        let source_path = if encrypted { main_enc } else { main_py };
-        let size = fs::metadata(&source_path).map(|m| m.len()).unwrap_or(0);
-
-        result.push(ScriptInfo {
-            name: metadata.name.clone(),
-            subdir: subdir.to_string(),
-            path: format!("{}/{}", path_prefix, script_name),
-            size,
-            modified: metadata.last_modified.clone(),
-            description: metadata.description,
-            author: metadata.author,
-            version: metadata.version,
-            encrypted,
-        });
     }
 
     result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -521,7 +556,8 @@ pub fn get_script_source(
     let folder = subdir.unwrap_or_else(|| "official".to_string());
     let scripts_path = Path::new(&scripts_dir);
     let script_dir = if folder == "scripts" {
-        get_user_script_dir(scripts_path, &script_name)
+        resolve_existing_user_script_dir(scripts_path, &script_name)
+            .ok_or_else(|| format!("Script not found: {}", script_name))?
     } else {
         scripts_path.join(folder).join(&script_name)
     };
