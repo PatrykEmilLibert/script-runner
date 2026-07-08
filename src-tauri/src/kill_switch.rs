@@ -4,10 +4,13 @@ use std::path::PathBuf;
 
 const CACHE_FILE: &str = "kill_switch_cache.json";
 const CACHE_DURATION_HOURS: i64 = 24;
+// Kill switch config is hosted in the PUBLIC script-runner-scripts repo so every
+// client can read it with no token. admins.json stays in the private
+// script-runner-config repo; the two are intentionally separated.
 const DEFAULT_GITHUB_KILL_SWITCH_API_URL: &str =
-    "https://api.github.com/repos/PatrykEmilLibert/script-runner-config/contents/kill_switch.json";
+    "https://api.github.com/repos/PatrykEmilLibert/script-runner-scripts/contents/kill_switch.json";
 const DEFAULT_PUBLIC_KILL_SWITCH_URL: &str =
-    "https://raw.githubusercontent.com/PatrykEmilLibert/script-runner-config/main/kill_switch.json";
+    "https://raw.githubusercontent.com/PatrykEmilLibert/script-runner-scripts/main/kill_switch.json";
 const COMPILED_KILL_SWITCH_URL: Option<&str> = option_env!("SR_KILL_SWITCH_URL");
 const COMPILED_KILL_SWITCH_READ_TOKEN: Option<&str> = option_env!("SR_KILL_SWITCH_READ_TOKEN");
 

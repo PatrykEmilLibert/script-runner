@@ -3,7 +3,10 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::json;
 use std::env;
 
-const GITHUB_API_BASE: &str = "https://api.github.com/repos/PatrykEmilLibert/script-runner-config";
+// Admin writes kill_switch.json to the PUBLIC script-runner-scripts repo, which
+// is the same public source every client reads from (see kill_switch.rs). The
+// admin's GitHub token (or SR_SCRIPTS_PUSH_TOKEN) must have write access to it.
+const GITHUB_API_BASE: &str = "https://api.github.com/repos/PatrykEmilLibert/script-runner-scripts";
 
 fn resolve_github_token() -> Result<String, String> {
     if let Ok(token) = env::var("GITHUB_TOKEN") {
