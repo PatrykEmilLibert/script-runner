@@ -1576,6 +1576,16 @@ fn clear_analytics_data() -> Result<(), String> {
 }
 
 fn main() {
+    // Force the real macOS product version for this process and every child it
+    // spawns (python, pip, venv creation, health checks, user scripts). This
+    // binary is built with an older MACOSX_DEPLOYMENT_TARGET, which otherwise
+    // triggers SYSTEM_VERSION_COMPAT so the OS reports a legacy compatibility
+    // version (e.g. 16 instead of the real 26). Setting it here, before anything
+    // is spawned, fixes it everywhere via environment inheritance — the existing
+    // per-command overrides remain as a defensive fallback.
+    #[cfg(target_os = "macos")]
+    std::env::set_var("SYSTEM_VERSION_COMPAT", "0");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
