@@ -35,6 +35,10 @@
       "icons/icon.ico"
     ],
     "resources": ["python/**/*"],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",

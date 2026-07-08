@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Entitlements required to embed and spawn a full CPython interpreter
+      inside a hardened-runtime, notarized macOS app.
+
+      Without `disable-library-validation`, the hardened runtime refuses to let
+      the bundled `python3.12` load its own (re-signed / install_name_tool'd)
+      libraries and dynamically imported C extensions, so the interpreter fails
+      to start and Script Runner reports that Python "was not detected".
+      The JIT / unsigned-memory / dyld-env entitlements are the standard set
+      needed by CPython and common native wheels (numpy, opencv, etc.).
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+</dict>
+</plist>

@@ -411,6 +411,45 @@ jobs:
             echo "Apple signing secrets detected. Signed/notarized build will be attempted."
           fi
 
+      - name: Codesign bundled Python runtime (macOS)
+        run: |
+          # `install_name_tool` (and the pip installs above) invalidate the code
+          # signature of the bundled interpreter and its shared libraries. On
+          # Apple Silicon macOS refuses to execute a Mach-O with an *invalid*
+          # signature (SIGKILL), which is why Script Runner reported that Python
+          # "was not detected". Re-signing fixes this.
+          #
+          # This works WITHOUT a paid Apple Developer account: when no signing
+          # identity is configured we fall back to a free ad-hoc signature ("-"),
+          # which is enough to satisfy the kernel's code-signing requirement.
+          # NOTE: intentionally no `-u`; expanding an empty EXTRA_ARGS array
+          # under `set -u` aborts on the macOS system bash (3.2).
+          set -eo pipefail
+
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            SIGN_ID="$APPLE_SIGNING_IDENTITY"
+            EXTRA_ARGS=(--options runtime --timestamp --entitlements src-tauri/entitlements.plist)
+            echo "Signing bundled Python with Developer ID: $SIGN_ID"
+          else
+            SIGN_ID="-"
+            EXTRA_ARGS=()
+            echo "No Apple signing identity configured; using free ad-hoc signature."
+          fi
+
+          # Collect every Mach-O file under the bundled runtime and sign the most
+          # deeply nested ones first (inside-out), so seals stay valid.
+          find src-tauri/python -type f | while read -r f; do
+            if file "$f" | grep -q 'Mach-O'; then
+              printf '%s\t%s\n' "$(printf '%s' "$f" | awk -F/ '{print NF}')" "$f"
+            fi
+          done | sort -rn | cut -f2- | while read -r macho; do
+            codesign --force "${EXTRA_ARGS[@]}" --sign "$SIGN_ID" "$macho"
+          done
+
+          # Sanity check: the interpreter must have a valid signature now.
+          codesign --verify --verbose=2 src-tauri/python/bin/python3.12
+          echo "Bundled Python runtime signed and verified."
+
       - name: Build Tauri app (macOS)
         env:
           SR_UPDATER_PUBKEY: ${{ env.TAURI_UPDATER_PUBLIC_KEY }}
