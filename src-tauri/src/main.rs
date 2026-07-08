@@ -9,6 +9,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Condvar, Mutex};
 use tauri::State;
 use tauri_plugin_updater::UpdaterExt;
 
@@ -30,10 +31,56 @@ mod script_encryption;
 mod script_manager;
 mod settings;
 
+/// Lazily-resolved Python interpreter. Resolution (spawning python, creating a
+/// venv, copying the runtime on Windows) is slow, so it runs on a background
+/// thread at startup instead of blocking the app window from appearing. Commands
+/// that need Python call `get_blocking`, which waits until it is ready — and it
+/// always becomes ready because `resolve_python_exec` has an infallible fallback.
+pub struct PythonRuntime {
+    inner: Mutex<Option<PathBuf>>,
+    ready: Condvar,
+}
+
+impl PythonRuntime {
+    fn new() -> Self {
+        Self {
+            inner: Mutex::new(None),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn set(&self, path: PathBuf) {
+        if let Ok(mut guard) = self.inner.lock() {
+            *guard = Some(path);
+            self.ready.notify_all();
+        }
+    }
+
+    fn is_ready(&self) -> bool {
+        self.inner.lock().map(|g| g.is_some()).unwrap_or(false)
+    }
+
+    fn get_blocking(&self) -> PathBuf {
+        let mut guard = self.inner.lock().unwrap();
+        while guard.is_none() {
+            guard = self.ready.wait(guard).unwrap();
+        }
+        guard.clone().unwrap()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     scripts_dir: PathBuf,
-    python_exec: PathBuf,
+    python: Arc<PythonRuntime>,
+}
+
+impl AppState {
+    /// Returns the resolved Python interpreter, waiting if startup resolution is
+    /// still in progress.
+    fn python_exec(&self) -> PathBuf {
+        self.python.get_blocking()
+    }
 }
 
 const DEFAULT_RELEASES_REPO: &str = "PatrykEmilLibert/script-runner";
@@ -1084,15 +1131,17 @@ async fn sync_scripts(state: State<'_, AppState>) -> Result<String, String> {
         log::info!("Local official script encryption disabled by SR_ENCRYPT_OFFICIAL_LOCAL");
     }
 
-    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec)
+    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec())
         .await?;
     Ok(res)
 }
 
 #[tauri::command]
 async fn run_script(
+    app: tauri::AppHandle,
     script_name: String,
     args: Option<Vec<String>>,
+    timeout_secs: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let start_time = chrono::Utc::now();
@@ -1112,7 +1161,7 @@ async fn run_script(
     };
 
     // Install deps from requirements.txt if present (cached by hash)
-    dependency_manager::ensure_requirements(&script_dir, &state.python_exec).await?;
+    dependency_manager::ensure_requirements(&script_dir, &state.python_exec()).await?;
 
     // Fallback: auto-detect imports when no requirements.txt exists
     // For encrypted scripts, decrypt to analyze dependencies
@@ -1131,15 +1180,21 @@ async fn run_script(
             .map_err(|e| format!("Failed to write temp analysis file: {}", e))?;
 
         let deps = dependency_manager::detect_dependencies(&temp_analysis).await?;
-        dependency_manager::install_dependencies(&deps, &state.python_exec).await?;
+        dependency_manager::install_dependencies(&deps, &state.python_exec()).await?;
 
         let _ = std::fs::remove_file(temp_analysis); // Cleanup
     }
 
     // Run script and iteratively self-heal missing dependency errors.
-    let mut result =
-        python_runner::execute_script(&script_name, &script_path, &state.python_exec, args.clone())
-            .await;
+    let mut result = python_runner::execute_script(
+        &app,
+        &script_name,
+        &script_path,
+        &state.python_exec(),
+        args.clone(),
+        timeout_secs,
+    )
+    .await;
     let mut attempted_modules: HashSet<String> = HashSet::new();
     const MAX_AUTO_INSTALL_ATTEMPTS: usize = 20;
 
@@ -1168,7 +1223,7 @@ async fn run_script(
             script_name
         );
 
-        if dependency_manager::install_dependencies(&[module_name], &state.python_exec)
+        if dependency_manager::install_dependencies(&[module_name], &state.python_exec())
             .await
             .is_err()
         {
@@ -1176,10 +1231,12 @@ async fn run_script(
         }
 
         result = python_runner::execute_script(
+            &app,
             &script_name,
             &script_path,
-            &state.python_exec,
+            &state.python_exec(),
             args.clone(),
+            timeout_secs,
         )
         .await;
     }
@@ -1230,7 +1287,7 @@ fn stop_script(script_name: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn update_all_dependencies(state: State<'_, AppState>) -> Result<(), String> {
-    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec)
+    dependency_manager::ensure_all_scripts_requirements(&state.scripts_dir, &state.python_exec())
         .await
 }
 
@@ -1575,6 +1632,13 @@ fn clear_analytics_data() -> Result<(), String> {
     analytics::clear_analytics_data()
 }
 
+/// True once the bundled Python runtime has finished resolving in the background.
+/// The UI uses this to show a "preparing environment" state right after launch.
+#[tauri::command]
+fn is_python_ready(state: State<'_, AppState>) -> bool {
+    state.python.is_ready()
+}
+
 fn main() {
     // Force the real macOS product version for this process and every child it
     // spawns (python, pip, venv creation, health checks, user scripts). This
@@ -1586,7 +1650,30 @@ fn main() {
     #[cfg(target_os = "macos")]
     std::env::set_var("SYSTEM_VERSION_COMPAT", "0");
 
+    let log_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+
     tauri::Builder::default()
+        .plugin(
+            // Persist logs to a rotating file in the OS log directory (plus stdout
+            // in dev). Without this, release builds logged to stderr, which is
+            // discarded for a windowed app — making field issues (e.g. "Python not
+            // detected") impossible to diagnose after the fact.
+            tauri_plugin_log::Builder::new()
+                .level(log_level)
+                .max_file_size(5_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("script-runner".into()),
+                    }),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1645,28 +1732,33 @@ fn main() {
             get_analytics_data,
             export_analytics,
             clear_analytics_data,
-            read_file_content
+            read_file_content,
+            is_python_ready
         ])
-        .setup(|_app| {
-            #[cfg(debug_assertions)]
-            {
-                env_logger::builder()
-                    .filter_level(log::LevelFilter::Debug)
-                    .try_init()
-                    .ok();
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                env_logger::builder()
-                    .filter_level(log::LevelFilter::Info)
-                    .try_init()
-                    .ok();
-            }
+        .setup(|app| {
+            use tauri::{Emitter, Manager};
+
+            log::info!(
+                "ScriptRunner {} starting on {}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS
+            );
+
+            // Resolve the Python runtime off the main thread so the window opens
+            // immediately instead of waiting for venv creation / runtime copy.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let resolved = resolve_python_exec();
+                log::info!("Python runtime ready: {}", resolved.display());
+                handle.state::<AppState>().python.set(resolved.clone());
+                let _ = handle.emit("python-ready", resolved.display().to_string());
+            });
+
             Ok(())
         })
         .manage(AppState {
             scripts_dir: resolve_scripts_dir(),
-            python_exec: resolve_python_exec(),
+            python: Arc::new(PythonRuntime::new()),
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

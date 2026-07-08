@@ -114,11 +114,52 @@ pub fn check_platform_compatibility(script_content: &str) -> Result<Vec<String>,
     Ok(vec![])
 }
 
+/// Payload streamed to the UI for each line a running script prints.
+#[derive(Clone, serde::Serialize)]
+struct ScriptOutput {
+    script: String,
+    stream: String,
+    line: String,
+}
+
+/// Reads a child pipe line-by-line, emitting each line to the UI as it arrives
+/// and accumulating the full text (returned on join) for logs and the result.
+fn spawn_output_reader<R: std::io::Read + Send + 'static>(
+    app: tauri::AppHandle,
+    script_name: String,
+    pipe: R,
+    is_stderr: bool,
+) -> std::thread::JoinHandle<String> {
+    use std::io::BufRead;
+    use tauri::Emitter;
+
+    std::thread::spawn(move || {
+        let mut collected = String::new();
+        let reader = std::io::BufReader::new(pipe);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            let _ = app.emit(
+                "script-output",
+                ScriptOutput {
+                    script: script_name.clone(),
+                    stream: if is_stderr { "stderr" } else { "stdout" }.to_string(),
+                    line: line.clone(),
+                },
+            );
+            collected.push_str(&line);
+            collected.push('\n');
+        }
+        collected
+    })
+}
+
 pub async fn execute_script(
+    app: &tauri::AppHandle,
     script_name: &str,
     script_path: &PathBuf,
     python_exec: &PathBuf,
     args: Option<Vec<String>>,
+    timeout_secs: Option<u64>,
 ) -> Result<String, String> {
     use crate::script_encryption;
 
@@ -201,7 +242,7 @@ pub async fn execute_script(
         cmd.args(script_args);
     }
 
-    let child = cmd
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to execute script: {}", e))?;
 
@@ -213,9 +254,43 @@ pub async fn execute_script(
         processes.insert(script_name.to_string(), pid);
     }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Failed to execute script: {}", e));
+    // Stream stdout/stderr to the UI line-by-line while capturing the full text.
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|pipe| spawn_output_reader(app.clone(), script_name.to_string(), pipe, false));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|pipe| spawn_output_reader(app.clone(), script_name.to_string(), pipe, true));
+
+    // Wait for completion, terminating the process tree if it exceeds the
+    // optional timeout (0 or None means no limit — long scripts run freely).
+    let start = std::time::Instant::now();
+    let mut timed_out = false;
+    let exit_status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if let Some(limit) = timeout_secs {
+                    if limit > 0 && start.elapsed().as_secs() >= limit {
+                        let _ = kill_process_tree(pid);
+                        let _ = child.wait();
+                        timed_out = true;
+                        break None;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => {
+                let _ = child.wait();
+                if let Ok(mut processes) = running_script_pids().lock() {
+                    processes.remove(script_name);
+                }
+                return Err(format!("Failed to execute script: {}", e));
+            }
+        }
+    };
 
     {
         if let Ok(mut processes) = running_script_pids().lock() {
@@ -223,15 +298,17 @@ pub async fn execute_script(
         }
     }
 
-    let output = output?;
+    let stdout = stdout_reader
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    let stderr = stderr_reader
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
 
     // Clean up temp file if it was created
     if let Some(temp) = temp_file {
         let _ = std::fs::remove_file(temp); // Ignore errors on cleanup
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     // Save logs
     if let Some(script_name) = script_path.file_stem() {
@@ -254,15 +331,14 @@ pub async fn execute_script(
                 cwd,
                 std::env::consts::OS
             );
-            let _ = writeln!(
-                file,
-                "=== Status ===\n{}\n",
-                if output.status.success() {
-                    "Success"
-                } else {
-                    "Failed"
-                }
-            );
+            let status_label = if timed_out {
+                "Timed out"
+            } else if exit_status.map(|s| s.success()).unwrap_or(false) {
+                "Success"
+            } else {
+                "Failed"
+            };
+            let _ = writeln!(file, "=== Status ===\n{}\n", status_label);
         }
     }
 
@@ -279,7 +355,22 @@ pub async fn execute_script(
         }
     };
 
-    if output.status.success() {
+    if timed_out {
+        let base = format!(
+            "Script timed out after {}s and was terminated (python: {}).",
+            timeout_secs.unwrap_or(0),
+            python_exec.display()
+        );
+        return Err(if combined.is_empty() {
+            base
+        } else {
+            format!("{}\n{}", base, combined)
+        });
+    }
+
+    let status = exit_status.expect("exit status is present when the script did not time out");
+
+    if status.success() {
         // On success also return combined so stderr warnings are visible
         if combined.is_empty() {
             Ok(stdout)
@@ -287,12 +378,12 @@ pub async fn execute_script(
             Ok(combined)
         }
     } else {
-        let exit_detail = if let Some(code) = output.status.code() {
+        let exit_detail = if let Some(code) = status.code() {
             format!("exit code {}", code)
         } else {
             #[cfg(unix)]
             {
-                if let Some(signal) = output.status.signal() {
+                if let Some(signal) = status.signal() {
                     format!("terminated by signal {}", signal)
                 } else {
                     "unknown process termination".to_string()
@@ -311,7 +402,7 @@ pub async fn execute_script(
 
                 #[cfg(unix)]
                 {
-                    if output.status.signal() == Some(6) {
+                    if status.signal() == Some(6) {
                         format!(
                             "{}. Process aborted (SIGABRT) before writing stdout/stderr; this often indicates a Python runtime/bootstrap crash on macOS.",
                             base

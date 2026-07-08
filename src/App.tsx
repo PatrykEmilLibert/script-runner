@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation } from "react-i18next";
@@ -70,6 +71,7 @@ export default function App() {
     removeToast,
     unreadCount,
   } = useNotifications();
+  const [pythonReady, setPythonReady] = useState(false);
   const [appBlocked, setAppBlocked] = useState(false);
   const [blockReason, setBlockReason] = useState<string>("");
   const [networkError, setNetworkError] = useState(false);
@@ -410,6 +412,17 @@ export default function App() {
       setErrorMessage(`Failed to open folder: ${error}`);
     }
   };
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    invoke<boolean>("is_python_ready").then(setPythonReady).catch(() => {});
+    listen("python-ready", () => setPythonReady(true)).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const initializeApp = async (showBlockingLoader = false) => {
     const shouldBlockUi = showBlockingLoader || !hasBootstrappedRef.current;
@@ -1083,6 +1096,11 @@ export default function App() {
 
       <AppShell.Main className="bg-gradient-to-br from-gray-50 to-pink-50/30 dark:from-gray-900 dark:to-gray-950">
         <Container fluid className="px-6">
+          {!pythonReady && (
+            <Alert title="Preparing environment…" color="blue" mb="md" className="pink-alert">
+              Setting up the Python runtime. Scripts will start automatically once it's ready.
+            </Alert>
+          )}
           {errorMessage && (
             <Alert 
               title="Error" 

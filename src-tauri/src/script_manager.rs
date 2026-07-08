@@ -301,7 +301,7 @@ pub async fn add_script(
     // Ensure all scripts' requirements are installed
     crate::dependency_manager::ensure_all_scripts_requirements(
         &std::path::PathBuf::from(&scripts_dir),
-        &state.python_exec,
+        &state.python_exec(),
     )
     .await?;
     Ok(result)
@@ -328,7 +328,7 @@ pub async fn add_official_script(
     // Ensure all scripts' requirements are installed
     crate::dependency_manager::ensure_all_scripts_requirements(
         &std::path::PathBuf::from(&scripts_dir),
-        &state.python_exec,
+        &state.python_exec(),
     )
     .await?;
     Ok(result)
@@ -383,7 +383,7 @@ pub async fn delete_script(
     // Ensure all scripts' requirements are installed (rebuild after deletion)
     crate::dependency_manager::ensure_all_scripts_requirements(
         &std::path::PathBuf::from(&scripts_dir),
-        &state.python_exec,
+        &state.python_exec(),
     )
     .await?;
 
@@ -608,7 +608,7 @@ pub async fn replace_official_script_content(
 
     crate::dependency_manager::ensure_all_scripts_requirements(
         &std::path::PathBuf::from(&scripts_dir),
-        &state.python_exec,
+        &state.python_exec(),
     )
     .await?;
 
@@ -714,7 +714,7 @@ pub async fn update_official_script_full(
 
     crate::dependency_manager::ensure_all_scripts_requirements(
         &std::path::PathBuf::from(&scripts_dir),
-        &state.python_exec,
+        &state.python_exec(),
     )
     .await?;
 
@@ -790,7 +790,7 @@ pub async fn bulk_delete_official_scripts(
 
         crate::dependency_manager::ensure_all_scripts_requirements(
             &std::path::PathBuf::from(&scripts_dir),
-            &state.python_exec,
+            &state.python_exec(),
         )
         .await?;
     }
