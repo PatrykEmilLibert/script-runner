@@ -131,13 +131,44 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
                 .map_err(|e| format!("Failed to find remote main: {}", e))?;
 
             // Step 3: if the local branch still has commits that are NOT on the
-            // remote (the push above failed — still offline, no token, or the
-            // branches diverged), do NOT hard reset: that would destroy those
-            // local-only user scripts. Keep local state and defer the update to a
-            // future launch, once the push finally succeeds.
+            // remote (the push above failed — offline, no token, or the branches
+            // diverged), do NOT hard reset: that would destroy those local-only
+            // user scripts.
             if let Some(head_oid) = repo.head().ok().and_then(|head| head.target()) {
-                let (ahead, _behind) = repo.graph_ahead_behind(head_oid, oid).unwrap_or((0, 0));
+                let (ahead, behind) = repo.graph_ahead_behind(head_oid, oid).unwrap_or((0, 0));
                 if ahead > 0 {
+                    // If the remote also advanced (diverged history), replay the
+                    // local commits on top of it. User scripts live under
+                    // scripts/<namespace>/ and official scripts under official/,
+                    // so they never touch the same files — the rebase is
+                    // conflict-free in practice, and afterwards we push them up.
+                    if behind > 0 {
+                        match rebase_local_onto(&repo, oid) {
+                            Ok(()) => {
+                                log::info!(
+                                    "Rebased {} local script commit(s) onto updated remote.",
+                                    ahead
+                                );
+                                if let Err(e) = script_manager::push_local_changes(repo_path) {
+                                    log::warn!("Rebased locally but push failed: {}", e);
+                                }
+                                return Ok("Scripts synced (local changes rebased)".to_string());
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Could not rebase local commits onto remote ({}); keeping local scripts and deferring update.",
+                                    e
+                                );
+                                return Ok(
+                                    "Local scripts preserved (pending upload); update deferred"
+                                        .to_string(),
+                                );
+                            }
+                        }
+                    }
+
+                    // Local is strictly ahead (remote did not move): nothing to
+                    // pull. Keep local as-is; the push above will retry next time.
                     log::warn!(
                         "{} local script commit(s) are not yet on the remote; keeping local scripts and skipping hard reset to avoid data loss.",
                         ahead
@@ -165,6 +196,53 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
             Err("No repository".to_string())
         }
     }
+}
+
+/// Replays the local-only commits on top of `onto` (the fetched origin/main),
+/// using libgit2 so it also works on machines without the git CLI. Aborts and
+/// returns an error on any conflict, leaving the working tree untouched, so the
+/// caller can safely fall back to preserving local scripts.
+fn rebase_local_onto(repo: &Repository, onto: git2::Oid) -> Result<(), String> {
+    let signature = repo
+        .signature()
+        .or_else(|_| git2::Signature::now("script-runner", "script-runner@local"))
+        .map_err(|e| format!("Failed to build git signature: {}", e))?;
+
+    let head = repo
+        .head()
+        .map_err(|e| format!("Failed to read HEAD: {}", e))?;
+    let local = repo
+        .reference_to_annotated_commit(&head)
+        .map_err(|e| format!("Failed to resolve HEAD commit: {}", e))?;
+    let upstream = repo
+        .find_annotated_commit(onto)
+        .map_err(|e| format!("Failed to resolve remote commit: {}", e))?;
+
+    let mut rebase = repo
+        .rebase(Some(&local), Some(&upstream), None, None)
+        .map_err(|e| format!("Failed to start rebase: {}", e))?;
+
+    while let Some(op) = rebase.next() {
+        op.map_err(|e| format!("Rebase step failed: {}", e))?;
+
+        if repo.index().map(|idx| idx.has_conflicts()).unwrap_or(false) {
+            let _ = rebase.abort();
+            return Err("rebase produced conflicts".to_string());
+        }
+
+        if let Err(e) = rebase.commit(None, &signature, None) {
+            // git2 returns "unmerged" as an error when a step has nothing to
+            // apply; any real failure aborts to keep the tree consistent.
+            let _ = rebase.abort();
+            return Err(format!("Failed to commit rebased change: {}", e));
+        }
+    }
+
+    rebase
+        .finish(Some(&signature))
+        .map_err(|e| format!("Failed to finish rebase: {}", e))?;
+
+    Ok(())
 }
 
 #[allow(dead_code)]
