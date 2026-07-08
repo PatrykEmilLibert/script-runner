@@ -96,12 +96,30 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
         Ok(repo) => {
             log::info!("Repository found, attempting sync");
 
+            // Step 1: push any local (possibly offline-created) script changes
+            // BEFORE pulling. This commits pending changes and best-effort pushes
+            // them; it never hard-fails. Doing it first means scripts added while
+            // offline are uploaded now that we are online, so the hard reset below
+            // cannot discard them.
+            if let Err(e) = script_manager::push_local_changes(repo_path) {
+                log::warn!("Could not push local script changes before sync: {}", e);
+            }
+
             let mut remote = repo
                 .find_remote("origin")
                 .map_err(|e| format!("Failed to find remote: {}", e))?;
 
-            // Fetch from remote - requires internet connection
-            if let Err(e) = remote.fetch(&["main"], None, None) {
+            // Step 2: fetch from remote - requires internet connection.
+            // NOTE: the refspec MUST include the destination
+            // (`:refs/remotes/origin/main`), otherwise libgit2 only updates
+            // FETCH_HEAD and leaves `refs/remotes/origin/main` pointing at the
+            // commit from the very first clone. That stale ref caused two bugs:
+            //   * official scripts never updated after the first download, and
+            //   * freshly added user scripts (committed + pushed) were wiped by
+            //     the hard reset below, because it reset back to the old commit.
+            if let Err(e) =
+                remote.fetch(&["+refs/heads/main:refs/remotes/origin/main"], None, None)
+            {
                 log::warn!(
                     "Failed to fetch from remote, using cached local scripts: {}",
                     e
@@ -113,10 +131,31 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
                 .refname_to_id("refs/remotes/origin/main")
                 .map_err(|e| format!("Failed to find remote main: {}", e))?;
 
+            // Step 3: if the local branch still has commits that are NOT on the
+            // remote (the push above failed — still offline, no token, or the
+            // branches diverged), do NOT hard reset: that would destroy those
+            // local-only user scripts. Keep local state and defer the update to a
+            // future launch, once the push finally succeeds.
+            if let Some(head_oid) = repo.head().ok().and_then(|head| head.target()) {
+                let (ahead, _behind) = repo.graph_ahead_behind(head_oid, oid).unwrap_or((0, 0));
+                if ahead > 0 {
+                    log::warn!(
+                        "{} local script commit(s) are not yet on the remote; keeping local scripts and skipping hard reset to avoid data loss.",
+                        ahead
+                    );
+                    return Ok(
+                        "Local scripts preserved (pending upload); update deferred".to_string(),
+                    );
+                }
+            }
+
             let object = repo
                 .find_object(oid, None)
                 .map_err(|e| format!("Failed to find object: {}", e))?;
 
+            // Safe now: local HEAD is an ancestor of (or equal to) the remote, so
+            // the reset only fast-forwards in remote changes without dropping any
+            // local-only commit.
             repo.reset(&object, git2::ResetType::Hard, None)
                 .map_err(|e| format!("Failed to reset: {}", e))?;
 

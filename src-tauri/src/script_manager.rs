@@ -1013,6 +1013,17 @@ fn is_stdlib_module(module: &str) -> bool {
     stdlib_modules.contains(&module)
 }
 
+/// Commits any pending local script changes and makes a best-effort push to the
+/// remote. Never hard-fails: if the push cannot happen (offline, or no push
+/// token) the changes stay committed locally and are retried on the next sync.
+///
+/// Called at the start of a sync — before fetching/resetting — so that scripts a
+/// user added while offline are uploaded *before* any update is pulled, and are
+/// therefore never discarded by the hard reset that follows.
+pub fn push_local_changes(scripts_path: &Path) -> Result<(), String> {
+    commit_and_push(scripts_path, "Sync local script changes".to_string())
+}
+
 fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String> {
     match commit_and_push_via_cli(scripts_path, &commit_msg) {
         Ok(()) => Ok(()),
