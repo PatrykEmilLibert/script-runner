@@ -117,8 +117,7 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
             //   * official scripts never updated after the first download, and
             //   * freshly added user scripts (committed + pushed) were wiped by
             //     the hard reset below, because it reset back to the old commit.
-            if let Err(e) =
-                remote.fetch(&["+refs/heads/main:refs/remotes/origin/main"], None, None)
+            if let Err(e) = remote.fetch(&["+refs/heads/main:refs/remotes/origin/main"], None, None)
             {
                 log::warn!(
                     "Failed to fetch from remote, using cached local scripts: {}",
@@ -144,7 +143,7 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
                         ahead
                     );
                     return Ok(
-                        "Local scripts preserved (pending upload); update deferred".to_string(),
+                        "Local scripts preserved (pending upload); update deferred".to_string()
                     );
                 }
             }

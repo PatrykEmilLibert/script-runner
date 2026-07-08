@@ -487,8 +487,8 @@ fn collect_scripts_from_subdir(
             continue;
         }
 
-        let entries = fs::read_dir(&root)
-            .map_err(|e| format!("Failed to read {}: {}", subdir, e))?;
+        let entries =
+            fs::read_dir(&root).map_err(|e| format!("Failed to read {}: {}", subdir, e))?;
 
         for entry in entries {
             let entry = entry.map_err(|e| format!("Failed to read entry in {}: {}", subdir, e))?;
@@ -528,7 +528,7 @@ fn collect_scripts_from_subdir(
         }
     }
 
-    result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    result.sort_by_key(|a| a.name.to_lowercase());
     Ok(result)
 }
 

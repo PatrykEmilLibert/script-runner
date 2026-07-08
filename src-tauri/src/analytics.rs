@@ -204,7 +204,7 @@ pub fn get_analytics_data(days: Option<u32>) -> Result<AnalyticsData, String> {
         )
         .collect();
 
-    top_scripts.sort_by(|a, b| b.executions.cmp(&a.executions));
+    top_scripts.sort_by_key(|b| std::cmp::Reverse(b.executions));
     top_scripts.truncate(10);
 
     // Calculate overall stats
