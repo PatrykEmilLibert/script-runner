@@ -338,23 +338,41 @@ jobs:
           mkdir -p src-tauri
           cp -R -L "$PYTHON_ROOT" src-tauri/python
 
-          # Make bundled python binaries relocatable inside the app bundle.
-          # Official python.org binaries are linked against an absolute
-          # /Library/Frameworks/... path, which does not exist on end-user Macs
-          # unless Python is separately installed system-wide.
+          # Make every bundled Mach-O relocatable inside the app bundle.
+          # Official python.org binaries link against an absolute
+          # /Library/Frameworks/... path that does not exist on end-user Macs.
+          # Patching only bin/python3.12 is not enough: a framework-build venv
+          # symlinks its interpreter to Resources/Python.app/Contents/MacOS/Python
+          # (the launcher stub), and extension modules can carry the same
+          # absolute dependency — all of them then crash at launch with
+          # "Library not loaded: /Library/Frameworks/Python.framework/.../Python".
+          # Rewrite the dependency to a @loader_path-relative path, which is
+          # correct for executables, the stub, and .so modules alike.
+          PY_ROOT="src-tauri/python"
           PY_DYLIB_FROM="/Library/Frameworks/Python.framework/Versions/3.12/Python"
-          for PY_EXE in src-tauri/python/bin/python3.12 src-tauri/python/bin/python3 src-tauri/python/bin/python; do
-            if [ -x "$PY_EXE" ]; then
-              install_name_tool -change "$PY_DYLIB_FROM" "@executable_path/../Python" "$PY_EXE" || true
+          PY_DYLIB_TO="$PWD/$PY_ROOT/Python"
+
+          find "$PY_ROOT" -type f | while read -r f; do
+            if file "$f" | grep -q 'Mach-O' && otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
+              rel="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$PY_DYLIB_TO" "$PWD/$f")"
+              echo "Relocating $f -> @loader_path/$rel"
+              install_name_tool -change "$PY_DYLIB_FROM" "@loader_path/$rel" "$f" || true
             fi
           done
 
-          if [ -x "src-tauri/python/bin/python3.12" ]; then
-            if otool -L "src-tauri/python/bin/python3.12" | grep -q "$PY_DYLIB_FROM"; then
-              echo "::error::python3.12 still depends on absolute /Library/Frameworks path"
-              otool -L "src-tauri/python/bin/python3.12"
-              exit 1
+          # Fail the build if any bundled Mach-O still references the absolute
+          # framework dylib. A runtime smoke test cannot catch this: the CI
+          # runner has Python installed at /Library/Frameworks, so an unpatched
+          # stub still loads there — only end-user Macs (without it) crash.
+          REMAINING="$(find "$PY_ROOT" -type f | while read -r f; do
+            if file "$f" | grep -q 'Mach-O' && otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
+              echo "$f"
             fi
+          done)"
+          if [ -n "$REMAINING" ]; then
+            echo "::error::Bundled Mach-O still depends on the absolute framework path:"
+            echo "$REMAINING"
+            exit 1
           fi
 
           if [ -x "src-tauri/python/bin/python3.12" ]; then
