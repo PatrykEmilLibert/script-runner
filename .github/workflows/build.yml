@@ -381,16 +381,20 @@ jobs:
           # framework path. A runtime smoke test cannot catch this: the CI runner
           # has Python installed at /Library/Frameworks, so an unpatched binary
           # still loads there — only end-user Macs (without it) crash.
-          REMAINING="$(find "$PY_ROOT" -type f | while read -r f; do
+          # NOTE: the macOS runner's /bin/bash is 3.2, which mis-parses a `case`
+          # statement inside $(...) command substitution — so collect offenders
+          # into a file instead of capturing the loop's output.
+          REMAINING_FILE="$(mktemp)"
+          find "$PY_ROOT" -type f | while read -r f; do
             case "$f" in *.a) continue ;; esac
             file "$f" | grep -q 'Mach-O' || continue
             if otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
-              echo "$f"
+              echo "$f" >> "$REMAINING_FILE"
             fi
-          done)"
-          if [ -n "$REMAINING" ]; then
+          done
+          if [ -s "$REMAINING_FILE" ]; then
             echo "::error::Bundled Mach-O still depends on the absolute framework path:"
-            echo "$REMAINING"
+            cat "$REMAINING_FILE"
             exit 1
           fi
 
