@@ -555,6 +555,21 @@ export default function App() {
     initializeApp(true);
   }, []);
 
+  // Re-run the startup flow on an interval so the kill switch stays live
+  // alongside the script sync. initializeApp checks the kill switch first
+  // (enforcing appBlocked in BOTH directions — it blocks when the switch is on
+  // and non-admin, and unblocks when it is turned off), then syncs scripts only
+  // when access is allowed. This way a kill switch flip reaches an
+  // already-running client within one interval, without needing a restart.
+  useEffect(() => {
+    const KILL_SWITCH_AND_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+    const id = setInterval(() => {
+      initializeApp(false);
+    }, KILL_SWITCH_AND_SYNC_INTERVAL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadLocalScripts = async (baseDir?: string) => {
     try {
       const dir = baseDir ?? scriptsDir;
