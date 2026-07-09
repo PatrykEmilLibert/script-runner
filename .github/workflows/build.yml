@@ -343,29 +343,48 @@ jobs:
           # /Library/Frameworks/... path that does not exist on end-user Macs.
           # Patching only bin/python3.12 is not enough: a framework-build venv
           # symlinks its interpreter to Resources/Python.app/Contents/MacOS/Python
-          # (the launcher stub), and extension modules can carry the same
-          # absolute dependency — all of them then crash at launch with
-          # "Library not loaded: /Library/Frameworks/Python.framework/.../Python".
-          # Rewrite the dependency to a @loader_path-relative path, which is
-          # correct for executables, the stub, and .so modules alike.
+          # (the launcher stub), and dylibs/extension modules carry the same
+          # absolute path — as a load dependency AND, for the framework dylib and
+          # its copies, as their own install id (LC_ID_DYLIB). All of them then
+          # crash at launch with "Library not loaded:
+          # /Library/Frameworks/Python.framework/.../Python". Rewrite the install
+          # id off the absolute path, and rewrite every load dependency to a
+          # @loader_path-relative path (correct for executables, the stub, and
+          # .so modules alike).
           PY_ROOT="src-tauri/python"
           PY_DYLIB_FROM="/Library/Frameworks/Python.framework/Versions/3.12/Python"
           PY_DYLIB_TO="$PWD/$PY_ROOT/Python"
 
           find "$PY_ROOT" -type f | while read -r f; do
-            if file "$f" | grep -q 'Mach-O' && otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
+            # Static archives are compile-time only, never dyld-loaded, and
+            # install_name_tool does not apply to ar archives.
+            case "$f" in *.a) continue ;; esac
+            file "$f" | grep -q 'Mach-O' || continue
+
+            # Rewrite the dylib's own install id when it is the absolute path
+            # (otool -L reports the id on its first line; -change only touches
+            # load dependencies, not the id).
+            if [ "$(otool -D "$f" 2>/dev/null | sed -n '2p')" = "$PY_DYLIB_FROM" ]; then
+              echo "Fixing install id of $f"
+              install_name_tool -id "@rpath/Python" "$f" || true
+            fi
+
+            # Rewrite any load dependency on the absolute framework dylib.
+            if otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
               rel="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$PY_DYLIB_TO" "$PWD/$f")"
               echo "Relocating $f -> @loader_path/$rel"
               install_name_tool -change "$PY_DYLIB_FROM" "@loader_path/$rel" "$f" || true
             fi
           done
 
-          # Fail the build if any bundled Mach-O still references the absolute
-          # framework dylib. A runtime smoke test cannot catch this: the CI
-          # runner has Python installed at /Library/Frameworks, so an unpatched
-          # stub still loads there — only end-user Macs (without it) crash.
+          # Fail the build if any dyld-loaded Mach-O still references the absolute
+          # framework path. A runtime smoke test cannot catch this: the CI runner
+          # has Python installed at /Library/Frameworks, so an unpatched binary
+          # still loads there — only end-user Macs (without it) crash.
           REMAINING="$(find "$PY_ROOT" -type f | while read -r f; do
-            if file "$f" | grep -q 'Mach-O' && otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
+            case "$f" in *.a) continue ;; esac
+            file "$f" | grep -q 'Mach-O' || continue
+            if otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
               echo "$f"
             fi
           done)"
