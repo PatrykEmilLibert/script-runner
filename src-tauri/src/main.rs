@@ -765,6 +765,24 @@ fn write_venv_base_marker(venv_dir: &Path, base_python: &Path) {
     let _ = fs::write(marker_path, normalized.to_string_lossy().to_string());
 }
 
+/// True if the venv was created with `--system-site-packages`. A venv from an
+/// older build lacks this and would hide the bundled libraries, so we treat it
+/// as incompatible and recreate it even when the base interpreter matches.
+fn venv_includes_system_site_packages(venv_dir: &Path) -> bool {
+    let cfg = match fs::read_to_string(venv_dir.join("pyvenv.cfg")) {
+        Ok(content) => content,
+        Err(_) => return false,
+    };
+
+    cfg.lines().any(|line| {
+        let mut parts = line.splitn(2, '=');
+        let key = parts.next().map(str::trim).unwrap_or("");
+        let value = parts.next().map(str::trim).unwrap_or("");
+        key.eq_ignore_ascii_case("include-system-site-packages")
+            && value.eq_ignore_ascii_case("true")
+    })
+}
+
 fn is_existing_venv_compatible(venv_dir: &Path, base_python: &Path) -> bool {
     let marker_path = venv_base_marker_path(venv_dir);
     let marker_value = match fs::read_to_string(&marker_path) {
@@ -773,6 +791,10 @@ fn is_existing_venv_compatible(venv_dir: &Path, base_python: &Path) -> bool {
     };
 
     if marker_value.is_empty() {
+        return false;
+    }
+
+    if !venv_includes_system_site_packages(venv_dir) {
         return false;
     }
 
@@ -808,7 +830,12 @@ fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
     }
 
     let mut cmd = Command::new(base_python);
-    cmd.args(["-m", "venv", &venv_dir.to_string_lossy()]);
+    // `--system-site-packages` lets the isolated venv see the packages that the
+    // build step preinstalled into the bundled interpreter (requests, numpy,
+    // pandas — see scripts/requirements.txt). Without it the venv starts empty,
+    // so every bundled library appears "missing" and has to be re-downloaded
+    // from PyPI at runtime (which fails offline).
+    cmd.args(["-m", "venv", "--system-site-packages", &venv_dir.to_string_lossy()]);
 
     #[cfg(target_os = "windows")]
     {
