@@ -37,6 +37,12 @@ fn apply_no_console_window(cmd: &mut Command) {
 fn apply_macos_runtime_env(cmd: &mut Command) {
     cmd.env("PYTHONFAULTHANDLER", "1");
     cmd.env("PYTHONUNBUFFERED", "1");
+    // Force UTF-8 for the child's stdout/stderr. Otherwise Python on a non-UTF-8
+    // Windows locale (e.g. Polish cp1250) encodes piped output in the ANSI code
+    // page, so a traceback containing non-ASCII bytes is not valid UTF-8 and the
+    // output reader would drop it. This only affects the std streams, not
+    // open()/filesystem encoding, so script file I/O behaviour is unchanged.
+    cmd.env("PYTHONIOENCODING", "utf-8");
 
     #[cfg(target_os = "macos")]
     {
@@ -135,19 +141,39 @@ fn spawn_output_reader<R: std::io::Read + Send + 'static>(
 
     std::thread::spawn(move || {
         let mut collected = String::new();
-        let reader = std::io::BufReader::new(pipe);
-        for line in reader.lines() {
-            let Ok(line) = line else { break };
-            let _ = app.emit(
-                "script-output",
-                ScriptOutput {
-                    script: script_name.clone(),
-                    stream: if is_stderr { "stderr" } else { "stdout" }.to_string(),
-                    line: line.clone(),
-                },
-            );
-            collected.push_str(&line);
-            collected.push('\n');
+        let mut reader = std::io::BufReader::new(pipe);
+        let mut raw: Vec<u8> = Vec::new();
+        // Read raw bytes and decode lossily instead of using `lines()`, which
+        // yields Err on invalid UTF-8. A strict reader would stop at the first
+        // non-UTF-8 byte and silently discard the rest of the output — e.g. a
+        // Python traceback written in a non-UTF-8 Windows code page collapses to
+        // just "Traceback (most recent call last):". Lossy decoding keeps every
+        // line (undecodable bytes become U+FFFD).
+        loop {
+            raw.clear();
+            match reader.read_until(b'\n', &mut raw) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if raw.last() == Some(&b'\n') {
+                        raw.pop();
+                        if raw.last() == Some(&b'\r') {
+                            raw.pop();
+                        }
+                    }
+                    let line = String::from_utf8_lossy(&raw).into_owned();
+                    let _ = app.emit(
+                        "script-output",
+                        ScriptOutput {
+                            script: script_name.clone(),
+                            stream: if is_stderr { "stderr" } else { "stdout" }.to_string(),
+                            line: line.clone(),
+                        },
+                    );
+                    collected.push_str(&line);
+                    collected.push('\n');
+                }
+                Err(_) => break,
+            }
         }
         collected
     })
