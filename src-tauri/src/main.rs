@@ -775,11 +775,12 @@ fn venv_includes_system_site_packages(venv_dir: &Path) -> bool {
     };
 
     cfg.lines().any(|line| {
-        let mut parts = line.splitn(2, '=');
-        let key = parts.next().map(str::trim).unwrap_or("");
-        let value = parts.next().map(str::trim).unwrap_or("");
-        key.eq_ignore_ascii_case("include-system-site-packages")
-            && value.eq_ignore_ascii_case("true")
+        let Some((key, value)) = line.split_once('=') else {
+            return false;
+        };
+        key.trim()
+            .eq_ignore_ascii_case("include-system-site-packages")
+            && value.trim().eq_ignore_ascii_case("true")
     })
 }
 
@@ -835,7 +836,12 @@ fn ensure_isolated_python_exec(base_python: &PathBuf) -> PathBuf {
     // pandas — see scripts/requirements.txt). Without it the venv starts empty,
     // so every bundled library appears "missing" and has to be re-downloaded
     // from PyPI at runtime (which fails offline).
-    cmd.args(["-m", "venv", "--system-site-packages", &venv_dir.to_string_lossy()]);
+    cmd.args([
+        "-m",
+        "venv",
+        "--system-site-packages",
+        &venv_dir.to_string_lossy(),
+    ]);
 
     #[cfg(target_os = "windows")]
     {
