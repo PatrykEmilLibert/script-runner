@@ -338,22 +338,21 @@ jobs:
           mkdir -p src-tauri
           cp -R -L "$PYTHON_ROOT" src-tauri/python
 
-          # Make every bundled Mach-O relocatable inside the app bundle.
-          # Official python.org binaries link against an absolute
-          # /Library/Frameworks/... path that does not exist on end-user Macs.
-          # Patching only bin/python3.12 is not enough: a framework-build venv
-          # symlinks its interpreter to Resources/Python.app/Contents/MacOS/Python
-          # (the launcher stub), and dylibs/extension modules carry the same
-          # absolute path — as a load dependency AND, for the framework dylib and
-          # its copies, as their own install id (LC_ID_DYLIB). All of them then
-          # crash at launch with "Library not loaded:
-          # /Library/Frameworks/Python.framework/.../Python". Rewrite the install
-          # id off the absolute path, and rewrite every load dependency to a
-          # @loader_path-relative path (correct for executables, the stub, and
-          # .so modules alike).
+          # Make every bundled Mach-O relocatable inside the app bundle. Official
+          # python.org binaries link against absolute
+          # /Library/Frameworks/Python.framework/Versions/3.12/... paths that do
+          # NOT exist on end-user Macs — and it is not only the main "Python"
+          # dylib. The bundled OpenSSL (lib/libssl.3.dylib, lib/libcrypto.3.dylib)
+          # that _ssl/_hashlib load, the launcher stub a venv symlinks to, and
+          # other extension modules all reference the framework by absolute path,
+          # as a load dependency AND (for dylibs) as their own install id. Any of
+          # them then fails with "Library not loaded: ..." — breaking the
+          # interpreter, or (for _ssl) all HTTPS so pip can no longer install
+          # anything. Rewrite every install id and load dependency that points
+          # into the absolute framework to a @loader_path-relative path into this
+          # bundle.
           PY_ROOT="src-tauri/python"
-          PY_DYLIB_FROM="/Library/Frameworks/Python.framework/Versions/3.12/Python"
-          PY_DYLIB_TO="$PWD/$PY_ROOT/Python"
+          FW_PREFIX="/Library/Frameworks/Python.framework/Versions/3.12"
 
           find "$PY_ROOT" -type f | while read -r f; do
             # Static archives are compile-time only, never dyld-loaded, and
@@ -361,34 +360,42 @@ jobs:
             case "$f" in *.a) continue ;; esac
             file "$f" | grep -q 'Mach-O' || continue
 
-            # Rewrite the dylib's own install id when it is the absolute path
-            # (otool -L reports the id on its first line; -change only touches
-            # load dependencies, not the id).
-            if [ "$(otool -D "$f" 2>/dev/null | sed -n '2p')" = "$PY_DYLIB_FROM" ]; then
-              echo "Fixing install id of $f"
-              install_name_tool -id "@rpath/Python" "$f" || true
-            fi
+            # Rewrite the install id if it points into the absolute framework
+            # (otool -D reports the id; -change only touches load dependencies).
+            id="$(otool -D "$f" 2>/dev/null | sed -n '2p')"
+            case "$id" in
+              "$FW_PREFIX"/*)
+                echo "Fixing install id of $f"
+                install_name_tool -id "@rpath/$(basename "$f")" "$f" || true
+                ;;
+            esac
 
-            # Rewrite any load dependency on the absolute framework dylib.
-            if otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
-              rel="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$PY_DYLIB_TO" "$PWD/$f")"
-              echo "Relocating $f -> @loader_path/$rel"
-              install_name_tool -change "$PY_DYLIB_FROM" "@loader_path/$rel" "$f" || true
-            fi
+            # Rewrite every load dependency that points into the absolute
+            # framework to the matching file inside this bundle.
+            otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r dep; do
+              case "$dep" in
+                "$FW_PREFIX"/*)
+                  target="$PWD/$PY_ROOT/${dep#$FW_PREFIX/}"
+                  rel="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$target" "$PWD/$f")"
+                  echo "Relocating $f: $dep -> @loader_path/$rel"
+                  install_name_tool -change "$dep" "@loader_path/$rel" "$f" || true
+                  ;;
+              esac
+            done
           done
 
           # Fail the build if any dyld-loaded Mach-O still references the absolute
-          # framework path. A runtime smoke test cannot catch this: the CI runner
-          # has Python installed at /Library/Frameworks, so an unpatched binary
-          # still loads there — only end-user Macs (without it) crash.
+          # framework path. A runtime smoke test alone cannot catch this on the CI
+          # runner (it has Python at /Library/Frameworks, so unpatched binaries
+          # still load there) — only end-user Macs (without it) crash.
           # NOTE: the macOS runner's /bin/bash is 3.2, which mis-parses a `case`
-          # statement inside $(...) command substitution — so collect offenders
-          # into a file instead of capturing the loop's output.
+          # inside $(...) command substitution — so collect offenders into a file
+          # instead of capturing the loop's output.
           REMAINING_FILE="$(mktemp)"
           find "$PY_ROOT" -type f | while read -r f; do
             case "$f" in *.a) continue ;; esac
             file "$f" | grep -q 'Mach-O' || continue
-            if otool -L "$f" 2>/dev/null | grep -q "$PY_DYLIB_FROM"; then
+            if otool -L "$f" 2>/dev/null | grep -q "$FW_PREFIX/"; then
               echo "$f" >> "$REMAINING_FILE"
             fi
           done
@@ -413,6 +420,13 @@ jobs:
             echo "::error::Bundled Python binary not found in src-tauri/python/bin"
             exit 1
           fi
+
+          # After relocation there is no absolute-path fallback, so importing the
+          # SSL/hash extensions here genuinely exercises the rewritten
+          # @loader_path deps into the bundled OpenSSL. If relocation were wrong,
+          # this fails on the runner instead of silently shipping a build where
+          # `import ssl` (and therefore pip/HTTPS) is broken on end-user Macs.
+          "$PY_BIN" -c "import ssl, hashlib; print('ssl ok:', ssl.OPENSSL_VERSION)"
 
           "$PY_BIN" -m ensurepip --upgrade || true
           "$PY_BIN" -m pip install --upgrade --force-reinstall pip setuptools wheel
