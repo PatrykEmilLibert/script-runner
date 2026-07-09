@@ -57,8 +57,26 @@ fn apply_macos_runtime_env(cmd: &mut Command) {
 }
 
 #[cfg(target_os = "macos")]
-const MACOS_VERSION_COMPAT_LAUNCHER: &str = r#"import os, platform, plistlib, runpy, subprocess, sys
+const MACOS_VERSION_COMPAT_LAUNCHER: &str = r#"import glob, os, platform, plistlib, runpy, subprocess, sys
 os.environ['SYSTEM_VERSION_COMPAT'] = '0'
+
+# Point Tcl/Tk at the bundled script libraries before the target script imports
+# tkinter. The relocated framework's compiled-in Tcl library path is absolute
+# (/Library/Frameworks/...) and missing on end-user Macs, and Tcl's
+# executable-relative fallback resolves via the venv/stub launcher to the wrong
+# place — so tkinter otherwise fails with "Can't find a usable init.tcl".
+# sys.base_prefix is the bundled framework root, which holds lib/tcl8.x/init.tcl
+# and lib/tk8.x/tk.tcl. TCL_LIBRARY/TK_LIBRARY are checked by Tcl before its own
+# search, so this fixes resolution without touching the (dev) fallback.
+for _sr_var, _sr_glob, _sr_marker in (
+    ('TCL_LIBRARY', 'tcl8.*', 'init.tcl'),
+    ('TK_LIBRARY', 'tk8.*', 'tk.tcl'),
+):
+    if not os.environ.get(_sr_var):
+        for _sr_dir in sorted(glob.glob(os.path.join(sys.base_prefix, 'lib', _sr_glob))):
+            if os.path.exists(os.path.join(_sr_dir, _sr_marker)):
+                os.environ[_sr_var] = _sr_dir
+                break
 
 def _real_macos_version():
     # Priority 1: read SystemVersion.plist directly — completely immune to
