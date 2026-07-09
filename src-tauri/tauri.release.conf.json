@@ -1,6 +1,6 @@
 {
   "productName": "ScriptRunner",
-  "version": "7.0.3",
+  "version": "7.0.4",
   "identifier": "com.scriptrunner.app",
   "build": {
     "beforeBuildCommand": "npm run build",
