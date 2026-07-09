@@ -78,6 +78,23 @@ for _sr_var, _sr_glob, _sr_marker in (
                 os.environ[_sr_var] = _sr_dir
                 break
 
+# Point the default TLS context at a real CA bundle. The relocated framework's
+# OpenSSL looks for certificates at a compiled-in absolute path that is missing
+# on end-user Macs (python.org normally fixes this via "Install Certificates"),
+# so stdlib ssl/urllib verification fails with CERTIFICATE_VERIFY_FAILED. certifi
+# (bundled as a requests dependency) ships a valid cacert.pem; fall back to the
+# framework's own cert.pem if present. ssl.create_default_context() picks up
+# SSL_CERT_FILE via set_default_verify_paths().
+if not os.environ.get('SSL_CERT_FILE'):
+    _sr_ca = ''
+    try:
+        import certifi
+        _sr_ca = certifi.where()
+    except Exception:
+        _sr_ca = os.path.join(sys.base_prefix, 'etc', 'openssl', 'cert.pem')
+    if _sr_ca and os.path.exists(_sr_ca):
+        os.environ['SSL_CERT_FILE'] = _sr_ca
+
 def _real_macos_version():
     # Priority 1: read SystemVersion.plist directly — completely immune to
     # SYSTEM_VERSION_COMPAT, always returns the real marketing version (e.g. 26.x
