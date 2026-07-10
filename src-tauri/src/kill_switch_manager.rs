@@ -3,10 +3,55 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::json;
 use std::env;
 
-// Admin writes kill_switch.json to the PUBLIC script-runner-scripts repo, which
-// is the same public source every client reads from (see kill_switch.rs). The
-// admin's GitHub token (or SR_SCRIPTS_PUSH_TOKEN) must have write access to it.
-const GITHUB_API_BASE: &str = "https://api.github.com/repos/PatrykEmilLibert/script-runner-scripts";
+// The admin writer MUST target the same repository the clients read from,
+// otherwise toggles are written to one repo while everyone reads another and
+// the switch never appears to change. Clients read from SR_KILL_SWITCH_URL
+// (see kill_switch.rs), so derive the write target from that same source and
+// only fall back to this default when no source URL is configured (e.g. dev).
+// The admin's GitHub token must have write access to the resolved repo.
+const DEFAULT_WRITE_API_BASE: &str =
+    "https://api.github.com/repos/PatrykEmilLibert/script-runner-scripts";
+const COMPILED_KILL_SWITCH_URL: Option<&str> = option_env!("SR_KILL_SWITCH_URL");
+
+/// Repo API base (`https://api.github.com/repos/OWNER/REPO`) the admin panel
+/// writes kill_switch.json to. Derived from SR_KILL_SWITCH_URL so it always
+/// matches where clients read from.
+fn write_api_base() -> String {
+    let source = std::env::var("SR_KILL_SWITCH_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            COMPILED_KILL_SWITCH_URL
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        });
+
+    source
+        .as_deref()
+        .and_then(repo_api_base_from_url)
+        .unwrap_or_else(|| DEFAULT_WRITE_API_BASE.to_string())
+}
+
+/// Extract `https://api.github.com/repos/OWNER/REPO` from either a GitHub
+/// contents API URL or a raw.githubusercontent.com URL.
+fn repo_api_base_from_url(url: &str) -> Option<String> {
+    let rest = url
+        .split("api.github.com/repos/")
+        .nth(1)
+        .or_else(|| url.split("raw.githubusercontent.com/").nth(1))?;
+
+    let mut parts = rest.split('/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+
+    Some(format!("https://api.github.com/repos/{}/{}", owner, repo))
+}
 
 fn resolve_github_token() -> Result<String, String> {
     if let Ok(token) = env::var("GITHUB_TOKEN") {
@@ -181,7 +226,7 @@ async fn fetch_current_config() -> Result<KillSwitchConfig, String> {
     let maybe_token = resolve_github_token().ok();
 
     let mut request = client
-        .get(format!("{}/contents/kill_switch.json", GITHUB_API_BASE))
+        .get(format!("{}/contents/kill_switch.json", write_api_base()))
         .header("Accept", "application/vnd.github.v3.raw")
         .header("User-Agent", "ScriptRunner-Admin")
         .timeout(std::time::Duration::from_secs(10));
@@ -221,10 +266,11 @@ pub async fn push_config_to_github(mut config: KillSwitchConfig) -> Result<(), S
     config.cached_at = None;
 
     let client = reqwest::Client::new();
+    let api_base = write_api_base();
 
     // First, get the current file to obtain its SHA
     let current_file_response = client
-        .get(format!("{}/contents/kill_switch.json", GITHUB_API_BASE))
+        .get(format!("{}/contents/kill_switch.json", api_base))
         .header("Authorization", format!("Bearer {}", github_token))
         .header("User-Agent", "ScriptRunner-Admin")
         .header("Accept", "application/vnd.github.v3+json")
@@ -259,7 +305,7 @@ pub async fn push_config_to_github(mut config: KillSwitchConfig) -> Result<(), S
 
     // Push the update
     let update_response = client
-        .put(format!("{}/contents/kill_switch.json", GITHUB_API_BASE))
+        .put(format!("{}/contents/kill_switch.json", api_base))
         .header("Authorization", format!("Bearer {}", github_token))
         .header("User-Agent", "ScriptRunner-Admin")
         .header("Accept", "application/vnd.github.v3+json")
