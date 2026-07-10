@@ -1422,6 +1422,18 @@ async fn github_login(token: String) -> Result<github_auth::AuthSession, String>
 }
 
 #[tauri::command]
+async fn start_github_device_flow() -> Result<github_auth::DeviceCodeResponse, String> {
+    github_auth::start_device_flow().await
+}
+
+#[tauri::command]
+async fn poll_github_device_flow(
+    device_code: String,
+) -> Result<github_auth::DeviceFlowPoll, String> {
+    github_auth::poll_device_flow(device_code).await
+}
+
+#[tauri::command]
 fn github_logout() -> Result<(), String> {
     github_auth::github_logout()
 }
@@ -1744,6 +1756,8 @@ fn main() {
             update_all_dependencies,
             check_admin_status,
             github_login,
+            start_github_device_flow,
+            poll_github_device_flow,
             github_logout,
             get_github_user,
             refresh_github_admin_status,

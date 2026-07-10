@@ -5,6 +5,14 @@ use std::path::PathBuf;
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const ADMINS_REPO: &str = "PatrykEmilLibert/script-runner-config";
 
+/// GitHub OAuth App client id (public identifier, not a secret) used for the
+/// Device Authorization Flow. The OAuth App must have "Device Flow" enabled.
+const GITHUB_CLIENT_ID: &str = "Ov23liI6qFrsfyIQZgal";
+const DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
+const ACCESS_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+/// Scope required to read the private admin config and push scripts.
+const DEVICE_SCOPE: &str = "repo";
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GitHubUser {
     pub login: String,
@@ -36,6 +44,39 @@ pub struct AuthSession {
     pub created_at: String,
 }
 
+/// Response from GitHub's device/code endpoint - shown to the user so they can
+/// authorize the app in their browser.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeviceCodeResponse {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
+/// Raw response from GitHub's access_token endpoint during polling.
+#[derive(Debug, Deserialize)]
+struct DeviceTokenResponse {
+    access_token: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+    interval: Option<u64>,
+}
+
+/// Result of a single poll attempt against the access_token endpoint. The
+/// frontend keeps polling on `Pending`/`SlowDown` until it gets `Authorized`.
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum DeviceFlowPoll {
+    /// User has not authorized yet - keep polling at the current interval.
+    Pending,
+    /// GitHub asks us to slow down - increase the polling interval (seconds).
+    SlowDown { interval: u64 },
+    /// User authorized the app - session is ready and saved.
+    Authorized { session: AuthSession },
+}
+
 fn auth_file_path() -> PathBuf {
     if let Some(data_dir) = dirs::data_dir() {
         let auth_dir = data_dir.join("ScriptRunner").join("auth");
@@ -46,8 +87,9 @@ fn auth_file_path() -> PathBuf {
     }
 }
 
-/// Login with GitHub PAT - verifies token and checks admin status
-pub async fn github_login(token: String) -> Result<AuthSession, String> {
+/// Verify a token, resolve admin status, and persist the session locally.
+/// Shared by both PAT login and the device flow.
+async fn build_session(token: String) -> Result<AuthSession, String> {
     // 1. Verify token and get user info
     let user = fetch_github_user(&token).await?;
 
@@ -56,7 +98,7 @@ pub async fn github_login(token: String) -> Result<AuthSession, String> {
 
     // 3. Create session
     let session = AuthSession {
-        token: token.clone(),
+        token,
         user,
         is_admin,
         created_at: chrono::Utc::now().to_rfc3339(),
@@ -71,6 +113,105 @@ pub async fn github_login(token: String) -> Result<AuthSession, String> {
         session.is_admin
     );
     Ok(session)
+}
+
+/// Login with GitHub PAT - verifies token and checks admin status
+pub async fn github_login(token: String) -> Result<AuthSession, String> {
+    build_session(token).await
+}
+
+/// Step 1 of the device flow: request a device + user code from GitHub.
+pub async fn start_device_flow() -> Result<DeviceCodeResponse, String> {
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(DEVICE_CODE_URL)
+        .header("Accept", "application/json")
+        .header("User-Agent", "ScriptRunner")
+        .form(&[("client_id", GITHUB_CLIENT_ID), ("scope", DEVICE_SCOPE)])
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to GitHub: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "GitHub device flow request failed: {} - {}. \
+             Make sure the OAuth App has Device Flow enabled.",
+            status, body
+        ));
+    }
+
+    let data: DeviceCodeResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse device code response: {}", e))?;
+
+    log::info!(
+        "Device flow started (user_code: {}, verification_uri: {})",
+        data.user_code,
+        data.verification_uri
+    );
+    Ok(data)
+}
+
+/// Step 2 of the device flow: poll once for the access token. The frontend
+/// calls this repeatedly (respecting `interval`) until it gets `Authorized`.
+pub async fn poll_device_flow(device_code: String) -> Result<DeviceFlowPoll, String> {
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(ACCESS_TOKEN_URL)
+        .header("Accept", "application/json")
+        .header("User-Agent", "ScriptRunner")
+        .form(&[
+            ("client_id", GITHUB_CLIENT_ID),
+            ("device_code", device_code.as_str()),
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:device_code",
+            ),
+        ])
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to GitHub: {}", e))?;
+
+    let token_resp: DeviceTokenResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse token response: {}", e))?;
+
+    // Success path
+    if let Some(token) = token_resp.access_token {
+        let session = build_session(token).await?;
+        return Ok(DeviceFlowPoll::Authorized { session });
+    }
+
+    // Still waiting / recoverable states vs. terminal errors
+    match token_resp.error.as_deref() {
+        Some("authorization_pending") => Ok(DeviceFlowPoll::Pending),
+        Some("slow_down") => Ok(DeviceFlowPoll::SlowDown {
+            interval: token_resp.interval.unwrap_or(5),
+        }),
+        Some("expired_token") => {
+            Err("The verification code expired. Please start the login again.".to_string())
+        }
+        Some("access_denied") => {
+            Err("Authorization was cancelled or denied in the browser.".to_string())
+        }
+        Some(other) => Err(format!(
+            "Device flow error: {}{}",
+            other,
+            token_resp
+                .error_description
+                .map(|d| format!(" - {}", d))
+                .unwrap_or_default()
+        )),
+        None => Err("Unexpected response from GitHub during device flow.".to_string()),
+    }
 }
 
 /// Logout - clear local session
