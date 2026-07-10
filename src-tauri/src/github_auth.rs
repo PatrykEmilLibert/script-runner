@@ -169,10 +169,7 @@ pub async fn poll_device_flow(device_code: String) -> Result<DeviceFlowPoll, Str
         .form(&[
             ("client_id", GITHUB_CLIENT_ID),
             ("device_code", device_code.as_str()),
-            (
-                "grant_type",
-                "urn:ietf:params:oauth:grant-type:device_code",
-            ),
+            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
         ])
         .timeout(std::time::Duration::from_secs(10))
         .send()
