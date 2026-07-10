@@ -52,6 +52,7 @@ interface AdminPanelProps {
   scriptsDir: string;
   officialDir: string;
   onRefreshScripts: () => void;
+  onPreviewBlockScreen?: (reason: string) => void;
 }
 
 interface ScriptInfo {
@@ -94,7 +95,7 @@ interface BulkScriptOperationResult {
   skipped: string[];
 }
 
-export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefreshScripts }: AdminPanelProps) {
+export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefreshScripts, onPreviewBlockScreen }: AdminPanelProps) {
   const { showSuccess, showError } = useNotifications();
 
   const readInputValue = (payload: unknown): string => {
@@ -1142,6 +1143,26 @@ export default function AdminPanel({ isAdmin, scriptsDir, officialDir, onRefresh
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(readInputValue(e))}
                 />
+
+                <Divider my="xs" />
+
+                <Alert color="yellow" variant="light" icon={<AlertTriangle size={16} />}>
+                  Uwaga: konta administratorów są celowo zwolnione z kill switcha, więc
+                  Twoja aplikacja się nie zablokuje. U zwykłych użytkowników zmiana wchodzi
+                  w życie po restarcie lub w ciągu ~5 minut. Użyj podglądu poniżej, aby
+                  zobaczyć, co zobaczą użytkownicy.
+                </Alert>
+
+                <Button
+                  variant="light"
+                  color="yellow"
+                  leftSection={<Eye size={18} />}
+                  onClick={() =>
+                    onPreviewBlockScreen?.(killSwitchReason || 'Manual toggle by admin')
+                  }
+                >
+                  Podejrzyj ekran blokady (test)
+                </Button>
               </Stack>
             </Card>
 

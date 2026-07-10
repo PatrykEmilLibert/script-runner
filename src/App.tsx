@@ -73,6 +73,8 @@ export default function App() {
   } = useNotifications();
   const [pythonReady, setPythonReady] = useState(false);
   const [appBlocked, setAppBlocked] = useState(false);
+  // Admin-only: preview the block screen without actually blocking access.
+  const [previewBlock, setPreviewBlock] = useState(false);
   const [blockReason, setBlockReason] = useState<string>("");
   const [networkError, setNetworkError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -562,7 +564,7 @@ export default function App() {
   // when access is allowed. This way a kill switch flip reaches an
   // already-running client within one interval, without needing a restart.
   useEffect(() => {
-    const KILL_SWITCH_AND_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+    const KILL_SWITCH_AND_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
     const id = setInterval(() => {
       initializeApp(false);
     }, KILL_SWITCH_AND_SYNC_INTERVAL_MS);
@@ -682,10 +684,19 @@ export default function App() {
     </Drawer>
   );
 
-  if (appBlocked) {
+  if (appBlocked || previewBlock) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-950">
         <div className="w-full max-w-2xl p-8">
+          {previewBlock && (
+            <div className="bg-yellow-500/15 border-2 border-yellow-500/60 rounded-lg p-4 mb-6 text-center">
+              <p className="text-yellow-300 font-semibold">
+                PODGLĄD / TEST MODE — to jest widok, który zobaczą zwykli użytkownicy.
+                Dostęp NIE jest zablokowany.
+              </p>
+            </div>
+          )}
+
           <div className="mb-6 text-center">
             <IconShield size={64} className="mx-auto text-red-500 mb-4" />
             <h1 className="text-3xl font-bold text-white mb-2">Kill Switch Active</h1>
@@ -698,15 +709,25 @@ export default function App() {
             <p className="text-gray-300 text-lg">{blockReason}</p>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-lg p-4 mb-4">
-            <GitHubLogin onAuthChange={handleBlockedAuthChange} />
-          </div>
+          {previewBlock ? (
+            <div className="flex justify-center">
+              <Button color="yellow" variant="light" onClick={() => setPreviewBlock(false)}>
+                Zamknij podgląd
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-white dark:bg-gray-900 rounded-lg p-4 mb-4">
+                <GitHubLogin onAuthChange={handleBlockedAuthChange} />
+              </div>
 
-          <div className="flex justify-center">
-            <Button color="pink" variant="light" onClick={() => initializeApp(false)}>
-              Retry Access Check
-            </Button>
-          </div>
+              <div className="flex justify-center">
+                <Button color="pink" variant="light" onClick={() => initializeApp(false)}>
+                  Retry Access Check
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1281,13 +1302,17 @@ export default function App() {
             </Tabs.Panel>
 
             <Tabs.Panel value="admin">
-              <AdminPanel 
+              <AdminPanel
                 isAdmin={isAdmin}
                 scriptsDir={scriptsDir}
                 officialDir={officialDir}
                 onRefreshScripts={() => {
                   loadLocalScripts();
                   loadOfficialScripts();
+                }}
+                onPreviewBlockScreen={(reason) => {
+                  setBlockReason(reason || "Application access is currently restricted");
+                  setPreviewBlock(true);
                 }}
               />
             </Tabs.Panel>
