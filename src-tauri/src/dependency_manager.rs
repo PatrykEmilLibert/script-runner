@@ -674,10 +674,18 @@ pub async fn detect_dependencies(script_path: &PathBuf) -> Result<Vec<String>, S
     Ok(imports.into_iter().collect())
 }
 
-fn hash_file(path: &Path) -> Result<u64, String> {
-    let data = fs::read(path).map_err(|e| format!("Failed to read file for hashing: {}", e))?;
+/// Hashes requirements content TOGETHER with the interpreter path. The isolated
+/// venv lives under a per-app-version directory, so every app update creates a
+/// fresh, empty venv — but the old "deps installed" markers next to the scripts
+/// survived and kept matching, silently skipping reinstallation into the new
+/// venv (scripts then failed with ModuleNotFoundError). Folding the interpreter
+/// path into the cache key invalidates the marker whenever the venv changes.
+fn deps_cache_key(req_content_source: &Path, python_exec: &Path) -> Result<u64, String> {
+    let data = fs::read(req_content_source)
+        .map_err(|e| format!("Failed to read file for hashing: {}", e))?;
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
+    python_exec.to_string_lossy().hash(&mut hasher);
     Ok(hasher.finish())
 }
 
@@ -691,7 +699,7 @@ pub async fn ensure_requirements(
     }
 
     let cache_path = script_dir.join(".deps-installed");
-    let current_hash = hash_file(&req_path)?;
+    let current_hash = deps_cache_key(&req_path, python_exec)?;
 
     // Skip install if hash matches cached
     if cache_path.exists() {
@@ -917,6 +925,9 @@ pub async fn ensure_all_scripts_requirements(
     let combined: Vec<String> = aggregated.into_iter().collect();
     let mut hasher = DefaultHasher::new();
     combined.hash(&mut hasher);
+    // Include the interpreter path so a fresh per-version venv invalidates the
+    // marker (see deps_cache_key).
+    python_exec.to_string_lossy().hash(&mut hasher);
     let combined_hash = hasher.finish();
     let cache_path = scripts_root.join(".deps-installed-all");
 
