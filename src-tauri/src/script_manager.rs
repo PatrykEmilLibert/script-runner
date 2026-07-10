@@ -1037,11 +1037,15 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
                 Ok(()) => Ok(()),
                 Err(libgit2_error) => {
                     log::warn!(
-                        "Push skipped. Changes saved locally only. Git CLI error: {}. libgit2 error: {}",
+                        "Push failed; changes saved locally only. Git CLI error: {}. libgit2 error: {}",
                         cli_error,
                         libgit2_error
                     );
-                    Ok(())
+                    Err(format!(
+                        "Zapisano lokalnie, ale publikacja na GitHub nie powiodła się — inni użytkownicy nie zobaczą zmiany, dopóki push nie przejdzie.\nGit CLI: {}\nlibgit2: {}\nSprawdź, czy token logowania ma prawo zapisu (repo / Contents: write) do script-runner-scripts oraz czy historia repo nie jest rozjechana.",
+                        cli_error.trim(),
+                        libgit2_error.trim()
+                    ))
                 }
             }
         }
