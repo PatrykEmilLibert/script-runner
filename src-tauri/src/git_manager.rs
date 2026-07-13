@@ -198,11 +198,46 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
     }
 }
 
+/// Fetches origin/main and, if the local branch is behind, rebases the
+/// local-only commits on top of it. Called before publishing freshly added
+/// scripts so a stale local clone does not produce a non-fast-forward
+/// rejection. On conflict the rebase aborts and the working tree is left
+/// untouched, so the caller can surface the failure without losing scripts.
+pub(crate) fn reconcile_local_with_remote(repo_path: &Path) -> Result<(), String> {
+    let repo =
+        Repository::open(repo_path).map_err(|e| format!("Failed to open repository: {}", e))?;
+
+    let mut remote = repo
+        .find_remote("origin")
+        .map_err(|e| format!("Failed to find remote: {}", e))?;
+
+    // Same refspec as sync_from_git so refs/remotes/origin/main is actually
+    // advanced (not just FETCH_HEAD) — see the note there.
+    remote
+        .fetch(&["+refs/heads/main:refs/remotes/origin/main"], None, None)
+        .map_err(|e| format!("Failed to fetch from remote: {}", e))?;
+
+    let oid = repo
+        .refname_to_id("refs/remotes/origin/main")
+        .map_err(|e| format!("Failed to resolve origin/main: {}", e))?;
+
+    if let Some(head_oid) = repo.head().ok().and_then(|head| head.target()) {
+        let (_ahead, behind) = repo.graph_ahead_behind(head_oid, oid).unwrap_or((0, 0));
+        if behind == 0 {
+            // Local already contains every remote commit; the push will be a
+            // fast-forward. Nothing to rebase.
+            return Ok(());
+        }
+    }
+
+    rebase_local_onto(&repo, oid)
+}
+
 /// Replays the local-only commits on top of `onto` (the fetched origin/main),
 /// using libgit2 so it also works on machines without the git CLI. Aborts and
 /// returns an error on any conflict, leaving the working tree untouched, so the
 /// caller can safely fall back to preserving local scripts.
-fn rebase_local_onto(repo: &Repository, onto: git2::Oid) -> Result<(), String> {
+pub(crate) fn rebase_local_onto(repo: &Repository, onto: git2::Oid) -> Result<(), String> {
     let signature = repo
         .signature()
         .or_else(|_| git2::Signature::now("script-runner", "script-runner@local"))

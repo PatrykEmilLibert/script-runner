@@ -1024,8 +1024,65 @@ pub fn push_local_changes(scripts_path: &Path) -> Result<(), String> {
     commit_and_push(scripts_path, "Sync local script changes".to_string())
 }
 
+/// How many times to reconcile with the remote and retry the push when it is
+/// rejected as non-fast-forward. More than one because another client can push
+/// in the window between our fetch and our push (a genuine race).
+const PUSH_RECONCILE_ATTEMPTS: u32 = 3;
+
 fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String> {
-    match commit_and_push_via_cli(scripts_path, &commit_msg) {
+    let mut attempt = 0;
+
+    loop {
+        match try_commit_and_push(scripts_path, &commit_msg) {
+            Ok(()) => return Ok(()),
+            Err((cli_error, libgit2_error)) => {
+                // The push path pushes "blind" (no fetch first), so if this
+                // local clone is behind the remote — because another client, or
+                // an official-script/kill-switch update, advanced origin/main
+                // since the last sync — GitHub rejects it as non-fast-forward.
+                // Reconcile (fetch + rebase our local commits on top) and retry,
+                // instead of leaving the script unpublished. User and official
+                // scripts live under disjoint paths, so the rebase is
+                // conflict-free in practice.
+                let diverged =
+                    is_non_fast_forward(&cli_error) || is_non_fast_forward(&libgit2_error);
+
+                if diverged && attempt < PUSH_RECONCILE_ATTEMPTS {
+                    attempt += 1;
+                    log::warn!(
+                        "Push rejected (non-fast-forward); reconciling with remote and retrying ({}/{}).",
+                        attempt,
+                        PUSH_RECONCILE_ATTEMPTS
+                    );
+
+                    match reconcile_with_remote(scripts_path) {
+                        Ok(()) => continue,
+                        Err(reconcile_error) => {
+                            log::warn!(
+                                "Could not reconcile with remote before retrying push: {}",
+                                reconcile_error
+                            );
+                            return Err(publish_failed_message(&cli_error, &libgit2_error));
+                        }
+                    }
+                }
+
+                log::warn!(
+                    "Push failed; changes saved locally only. Git CLI error: {}. libgit2 error: {}",
+                    cli_error,
+                    libgit2_error
+                );
+                return Err(publish_failed_message(&cli_error, &libgit2_error));
+            }
+        }
+    }
+}
+
+/// One commit+push attempt: Git CLI first, libgit2 as a fallback for machines
+/// without the CLI. Returns both errors so the caller can both detect a
+/// non-fast-forward rejection and report the full context if it gives up.
+fn try_commit_and_push(scripts_path: &Path, commit_msg: &str) -> Result<(), (String, String)> {
+    match commit_and_push_via_cli(scripts_path, commit_msg) {
         Ok(()) => Ok(()),
         Err(cli_error) => {
             log::warn!(
@@ -1033,23 +1090,96 @@ fn commit_and_push(scripts_path: &Path, commit_msg: String) -> Result<(), String
                 cli_error
             );
 
-            match commit_and_push_via_libgit2(scripts_path, &commit_msg) {
+            match commit_and_push_via_libgit2(scripts_path, commit_msg) {
                 Ok(()) => Ok(()),
-                Err(libgit2_error) => {
-                    log::warn!(
-                        "Push failed; changes saved locally only. Git CLI error: {}. libgit2 error: {}",
-                        cli_error,
-                        libgit2_error
-                    );
-                    Err(format!(
-                        "Zapisano lokalnie, ale publikacja na GitHub nie powiodła się — inni użytkownicy nie zobaczą zmiany, dopóki push nie przejdzie.\nGit CLI: {}\nlibgit2: {}\nSprawdź, czy token logowania ma prawo zapisu (repo / Contents: write) do script-runner-scripts oraz czy historia repo nie jest rozjechana.",
-                        cli_error.trim(),
-                        libgit2_error.trim()
-                    ))
-                }
+                Err(libgit2_error) => Err((cli_error, libgit2_error)),
             }
         }
     }
+}
+
+fn publish_failed_message(cli_error: &str, libgit2_error: &str) -> String {
+    format!(
+        "Zapisano lokalnie, ale publikacja na GitHub nie powiodła się — inni użytkownicy nie zobaczą zmiany, dopóki push nie przejdzie.\nGit CLI: {}\nlibgit2: {}\nSprawdź, czy token logowania ma prawo zapisu (repo / Contents: write) do script-runner-scripts oraz czy historia repo nie jest rozjechana.",
+        cli_error.trim(),
+        libgit2_error.trim()
+    )
+}
+
+/// True when a push error is a non-fast-forward / diverged-history rejection —
+/// the recoverable case a fetch+rebase can fix. Matches both the Git CLI
+/// wording and the libgit2 wording.
+fn is_non_fast_forward(err: &str) -> bool {
+    let e = err.to_lowercase();
+    e.contains("non-fast-forward")
+        || e.contains("non-fastforwardable")
+        || e.contains("notfastforward")
+        || e.contains("fast-forward")
+        || e.contains("is behind")
+}
+
+/// Brings the local clone up to date with origin/main before we retry the push,
+/// keeping our local-only commits rebased on top. Git CLI first, libgit2 as a
+/// fallback so it also works on machines without the CLI.
+fn reconcile_with_remote(scripts_path: &Path) -> Result<(), String> {
+    match reconcile_via_cli(scripts_path) {
+        Ok(()) => Ok(()),
+        Err(cli_error) => {
+            log::warn!(
+                "Git CLI reconcile failed, trying libgit2 fallback: {}",
+                cli_error
+            );
+            crate::git_manager::reconcile_local_with_remote(scripts_path).map_err(|libgit2_error| {
+                format!(
+                    "CLI: {} | libgit2: {}",
+                    cli_error.trim(),
+                    libgit2_error.trim()
+                )
+            })
+        }
+    }
+}
+
+fn reconcile_via_cli(scripts_path: &Path) -> Result<(), String> {
+    let mut fetch_cmd = Command::new("git");
+    fetch_cmd
+        .args(["fetch", "origin", "main"])
+        .current_dir(scripts_path);
+    apply_no_console_window(&mut fetch_cmd);
+    let fetch_output = fetch_cmd
+        .output()
+        .map_err(|e| format!("Git fetch failed: {}", e))?;
+    if !fetch_output.status.success() {
+        return Err(format!(
+            "Git fetch failed: {}",
+            String::from_utf8_lossy(&fetch_output.stderr)
+        ));
+    }
+
+    let mut rebase_cmd = Command::new("git");
+    rebase_cmd
+        .args(["rebase", "origin/main"])
+        .current_dir(scripts_path);
+    apply_no_console_window(&mut rebase_cmd);
+    let rebase_output = rebase_cmd
+        .output()
+        .map_err(|e| format!("Git rebase failed: {}", e))?;
+    if !rebase_output.status.success() {
+        // Abort so the working tree is left clean for the caller / fallback.
+        let mut abort_cmd = Command::new("git");
+        abort_cmd
+            .args(["rebase", "--abort"])
+            .current_dir(scripts_path);
+        apply_no_console_window(&mut abort_cmd);
+        let _ = abort_cmd.output();
+
+        return Err(format!(
+            "Git rebase failed: {}",
+            String::from_utf8_lossy(&rebase_output.stderr)
+        ));
+    }
+
+    Ok(())
 }
 
 fn commit_and_push_via_cli(scripts_path: &Path, commit_msg: &str) -> Result<(), String> {
