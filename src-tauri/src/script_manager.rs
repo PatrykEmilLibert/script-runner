@@ -1304,11 +1304,19 @@ fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<
 
     let mut callbacks = RemoteCallbacks::new();
 
-    let token = crate::github_auth::get_current_session()
-        .ok()
-        .flatten()
-        .map(|session| session.token)
-        .or_else(resolve_service_push_token)
+    // Prefer the compiled-in service push token: it is the one guaranteed to
+    // have write access to script-runner-scripts. A regular (non-admin) user's
+    // personal session token does NOT have write access, so using it here fails
+    // with a 403 — which is why non-admins without a working Git CLI could not
+    // publish. Fall back to the session token only for dev builds that ship no
+    // service token.
+    let token = resolve_service_push_token()
+        .or_else(|| {
+            crate::github_auth::get_current_session()
+                .ok()
+                .flatten()
+                .map(|session| session.token)
+        })
         .unwrap_or_default();
 
     if token.is_empty() {
