@@ -1296,41 +1296,50 @@ fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<
         .write()
         .map_err(|e| format!("Failed to write git index: {}", e))?;
 
-    let statuses = repo
-        .statuses(None)
-        .map_err(|e| format!("Failed to read git status: {}", e))?;
+    let tree_id = index
+        .write_tree()
+        .map_err(|e| format!("Failed to write git tree: {}", e))?;
+    let tree = repo
+        .find_tree(tree_id)
+        .map_err(|e| format!("Failed to find git tree: {}", e))?;
 
-    if !statuses.is_empty() {
-        let tree_id = index
-            .write_tree()
-            .map_err(|e| format!("Failed to write git tree: {}", e))?;
-        let tree = repo
-            .find_tree(tree_id)
-            .map_err(|e| format!("Failed to find git tree: {}", e))?;
+    let parent_commit = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .and_then(|oid| repo.find_commit(oid).ok());
 
+    // Only create a commit when the staged tree actually differs from HEAD.
+    // This guards against empty "Sync local script changes" commits: on some
+    // platforms the working tree looks dirty (e.g. the local official-script
+    // encryption artifacts) but `add_all` does not stage those changes, so the
+    // written tree equals HEAD's. Committing anyway would pile up empty commits
+    // that make the clone look "ahead" of the remote, which blocks the clean
+    // `reset --hard origin/main` that pulls newly added scripts — the exact
+    // reason long-time users stopped receiving new official scripts.
+    let tree_changed = match &parent_commit {
+        Some(parent) => parent.tree_id() != tree_id,
+        None => true,
+    };
+
+    if tree_changed {
         let signature = repo.signature().or_else(|_| default_git_signature())?;
-
-        if let Ok(head) = repo.head() {
-            if let Some(parent_oid) = head.target() {
-                let parent = repo
-                    .find_commit(parent_oid)
-                    .map_err(|e| format!("Failed to find parent commit: {}", e))?;
+        match &parent_commit {
+            Some(parent) => {
                 repo.commit(
                     Some("HEAD"),
                     &signature,
                     &signature,
                     commit_msg,
                     &tree,
-                    &[&parent],
+                    &[parent],
                 )
                 .map_err(|e| format!("Failed to create commit: {}", e))?;
-            } else {
+            }
+            None => {
                 repo.commit(Some("HEAD"), &signature, &signature, commit_msg, &tree, &[])
                     .map_err(|e| format!("Failed to create initial commit: {}", e))?;
             }
-        } else {
-            repo.commit(Some("HEAD"), &signature, &signature, commit_msg, &tree, &[])
-                .map_err(|e| format!("Failed to create initial commit: {}", e))?;
         }
     }
 
