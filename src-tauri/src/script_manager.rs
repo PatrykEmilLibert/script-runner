@@ -1156,9 +1156,20 @@ fn reconcile_via_cli(scripts_path: &Path) -> Result<(), String> {
         ));
     }
 
+    // Pass identity via -c for the same reason as the commit path: rebase sets
+    // the committer on every replayed commit and would otherwise fail with
+    // "*** Please tell me who you are" on a machine with no global git identity.
+    let (git_name, git_email) = git_identity();
     let mut rebase_cmd = Command::new("git");
     rebase_cmd
-        .args(["rebase", "origin/main"])
+        .args([
+            "-c",
+            &format!("user.name={}", git_name),
+            "-c",
+            &format!("user.email={}", git_email),
+            "rebase",
+            "origin/main",
+        ])
         .current_dir(scripts_path);
     apply_no_console_window(&mut rebase_cmd);
     let rebase_output = rebase_cmd
@@ -1198,10 +1209,21 @@ fn commit_and_push_via_cli(scripts_path: &Path, commit_msg: &str) -> Result<(), 
         ));
     }
 
-    // Git commit
+    // Git commit. Pass the identity explicitly via -c: a fresh client machine
+    // usually has no global user.name/user.email, so a bare `git commit` fails
+    // with "*** Please tell me who you are" and the publish never happens.
+    let (git_name, git_email) = git_identity();
     let mut commit_cmd = Command::new("git");
     commit_cmd
-        .args(["commit", "-m", commit_msg])
+        .args([
+            "-c",
+            &format!("user.name={}", git_name),
+            "-c",
+            &format!("user.email={}", git_email),
+            "commit",
+            "-m",
+            commit_msg,
+        ])
         .current_dir(scripts_path);
     apply_no_console_window(&mut commit_cmd);
     let commit_output = commit_cmd
@@ -1234,7 +1256,11 @@ fn commit_and_push_via_cli(scripts_path: &Path, commit_msg: &str) -> Result<(), 
     Ok(())
 }
 
-fn default_git_signature() -> Result<Signature<'static>, String> {
+/// Git identity for local commits: prefer the signed-in GitHub user, fall back
+/// to a generic script-runner identity. Used both to build the libgit2 signature
+/// and to feed the Git CLI via `-c`, so commits never depend on the machine
+/// having a configured global user.name/user.email.
+fn git_identity() -> (String, String) {
     if let Ok(Some(session)) = crate::github_auth::get_current_session() {
         let name = if session.user.login.trim().is_empty() {
             "script-runner".to_string()
@@ -1242,12 +1268,18 @@ fn default_git_signature() -> Result<Signature<'static>, String> {
             session.user.login.clone()
         };
         let email = format!("{}@users.noreply.github.com", name);
-        return Signature::now(&name, &email)
-            .map_err(|e| format!("Failed to create git signature: {}", e));
+        return (name, email);
     }
 
-    Signature::now("script-runner", "script-runner@local")
-        .map_err(|e| format!("Failed to create fallback git signature: {}", e))
+    (
+        "script-runner".to_string(),
+        "script-runner@local".to_string(),
+    )
+}
+
+fn default_git_signature() -> Result<Signature<'static>, String> {
+    let (name, email) = git_identity();
+    Signature::now(&name, &email).map_err(|e| format!("Failed to create git signature: {}", e))
 }
 
 fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<(), String> {

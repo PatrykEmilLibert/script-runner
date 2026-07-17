@@ -96,6 +96,11 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
         Ok(repo) => {
             log::info!("Repository found, attempting sync");
 
+            // Step 0: discard the working-tree side effects of local official-
+            // script encryption BEFORE anything else, so they can never enter a
+            // sync commit and permanently diverge this clone from the remote.
+            restore_official_encryption_artifacts(&repo, repo_path);
+
             // Step 1: push any local (possibly offline-created) script changes
             // BEFORE pulling. This commits pending changes and best-effort pushes
             // them; it never hard-fails. Doing it first means scripts added while
@@ -155,14 +160,36 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
                                 return Ok("Scripts synced (local changes rebased)".to_string());
                             }
                             Err(e) => {
+                                // The rebase could not be applied cleanly. This
+                                // is the freeze an old client hits when a local
+                                // official-script encryption commit (from before
+                                // Step 0 existed) collides with any upstream edit
+                                // to the same script — a modify/delete conflict
+                                // that recurs on every sync, so official scripts
+                                // never update again. Recover by resetting to the
+                                // remote while preserving genuine user scripts.
                                 log::warn!(
-                                    "Could not rebase local commits onto remote ({}); keeping local scripts and deferring update.",
+                                    "Could not rebase local commits onto remote ({}); attempting recovery reset.",
                                     e
                                 );
-                                return Ok(
-                                    "Local scripts preserved (pending upload); update deferred"
-                                        .to_string(),
-                                );
+                                match recover_diverged_branch(&repo, repo_path, oid) {
+                                    Ok(()) => {
+                                        return Ok(
+                                            "Scripts synced (recovered from diverged history)"
+                                                .to_string(),
+                                        );
+                                    }
+                                    Err(re) => {
+                                        log::warn!(
+                                            "Recovery reset failed ({}); keeping local scripts and deferring update.",
+                                            re
+                                        );
+                                        return Ok(
+                                            "Local scripts preserved (pending upload); update deferred"
+                                                .to_string(),
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -278,6 +305,144 @@ pub(crate) fn rebase_local_onto(repo: &Repository, onto: git2::Oid) -> Result<()
         .map_err(|e| format!("Failed to finish rebase: {}", e))?;
 
     Ok(())
+}
+
+/// Discards the working-tree side effects of local official-script encryption
+/// so they never enter a sync commit.
+///
+/// After every sync the app encrypts official scripts in place
+/// (`official/<name>/main.py` -> `main.py.enc`, deleting the plaintext — see
+/// `script_encryption::encrypt_official_scripts`). Those are modifications to
+/// git-tracked files. If the pre-sync `push_local_changes` commits them, this
+/// clone's branch permanently diverges from the remote, and every later upstream
+/// edit to an existing official script becomes a modify/delete conflict that
+/// freezes the whole library. Restoring the official tree to HEAD before syncing
+/// keeps the branch clean while leaving the on-disk `.enc` files (re-created
+/// right after each sync) as the local, never-committed encryption layer.
+fn restore_official_encryption_artifacts(repo: &Repository, repo_path: &Path) {
+    // 1. Bring tracked files back to HEAD (restores any deleted main.py).
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    checkout.force();
+    if let Err(e) = repo.checkout_head(Some(&mut checkout)) {
+        log::warn!("Could not restore tracked files to HEAD before sync: {}", e);
+        return;
+    }
+
+    // 2. Remove the untracked *.enc artifacts. A locally-encrypted script now
+    //    has BOTH main.py (just restored) and main.py.enc; a script encrypted on
+    //    the remote has only main.py.enc (tracked) and no main.py — so this
+    //    discriminator only ever deletes local artifacts, never remote content.
+    let official_root = repo_path.join("official");
+    if !official_root.exists() {
+        return;
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&official_root) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let main_py = dir.join("main.py");
+            let main_enc = dir.join("main.py.enc");
+            if main_py.exists() && main_enc.exists() {
+                if let Err(e) = std::fs::remove_file(&main_enc) {
+                    log::warn!(
+                        "Could not remove local encryption artifact {:?}: {}",
+                        main_enc,
+                        e
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Last-resort recovery when the local branch has diverged from origin/main in a
+/// way we cannot cleanly rebase (an old client that committed local official-
+/// script encryption before Step 0 existed). Preserves genuine user scripts,
+/// hard-resets to origin/main so official scripts match the remote again, then
+/// restores any user scripts that only existed locally so they are never lost.
+fn recover_diverged_branch(
+    repo: &Repository,
+    repo_path: &Path,
+    onto: git2::Oid,
+) -> Result<(), String> {
+    log::warn!("Recovering diverged scripts repo: reset to origin/main, preserving user scripts.");
+
+    let scripts_root = repo_path.join("scripts");
+    let backup_root = std::env::temp_dir().join("script_runner_user_scripts_backup");
+
+    // 1. Back up the whole user scripts tree (all namespaces + legacy layout).
+    let _ = std::fs::remove_dir_all(&backup_root);
+    if scripts_root.exists() {
+        copy_tree(&scripts_root, &backup_root, true)
+            .map_err(|e| format!("Failed to back up user scripts: {}", e))?;
+    }
+
+    // 2. Hard reset to origin/main so official scripts match the remote again.
+    let object = repo
+        .find_object(onto, None)
+        .map_err(|e| format!("Failed to find remote object: {}", e))?;
+    repo.reset(&object, git2::ResetType::Hard, None)
+        .map_err(|e| format!("Failed to reset to remote: {}", e))?;
+
+    // 3. Restore only the user script files the reset dropped (local-only work);
+    //    never overwrite the versions the remote already has.
+    let mut restored = 0usize;
+    if backup_root.exists() {
+        restored = copy_tree(&backup_root, &scripts_root, false)
+            .map_err(|e| format!("Failed to restore local user scripts: {}", e))?;
+    }
+    let _ = std::fs::remove_dir_all(&backup_root);
+
+    // 4. Re-commit the restored user scripts so they get published (best-effort).
+    if restored > 0 {
+        log::info!(
+            "Restored {} local user script file(s) after recovery reset.",
+            restored
+        );
+        if let Err(e) = script_manager::push_local_changes(repo_path) {
+            log::warn!(
+                "Restored {} user script file(s) but could not publish them yet: {}",
+                restored,
+                e
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Recursively copies `src` into `dest`. When `overwrite` is false, existing
+/// destination files are left untouched (used to restore only the local-only
+/// user scripts a recovery reset would otherwise drop). Returns the number of
+/// files actually written.
+fn copy_tree(src: &Path, dest: &Path, overwrite: bool) -> std::io::Result<usize> {
+    let mut copied = 0usize;
+
+    for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
+        let rel = match entry.path().strip_prefix(src) {
+            Ok(rel) => rel,
+            Err(_) => continue,
+        };
+        let target = dest.join(rel);
+
+        if entry.file_type().is_dir() {
+            std::fs::create_dir_all(&target)?;
+        } else if entry.file_type().is_file() {
+            if !overwrite && target.exists() {
+                continue;
+            }
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &target)?;
+            copied += 1;
+        }
+    }
+
+    Ok(copied)
 }
 
 #[allow(dead_code)]
