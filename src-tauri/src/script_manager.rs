@@ -17,6 +17,17 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 const COMPILED_SCRIPTS_PUSH_TOKEN: Option<&str> = option_env!("SR_SCRIPTS_PUSH_TOKEN");
 const COMPILED_SCRIPTS_PUSH_TOKEN_B64: Option<&str> = option_env!("SR_SCRIPTS_PUSH_TOKEN_B64");
 
+fn looks_like_github_token(value: &str) -> bool {
+    let v = value.trim();
+    v.starts_with("ghp_")
+        || v.starts_with("github_pat_")
+        || v.starts_with("gho_")
+        || v.starts_with("ghs_")
+        || v.starts_with("ghu_")
+        || v.starts_with("ghr_")
+        || (v.len() == 40 && v.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
 fn decode_base64_token(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -24,7 +35,21 @@ fn decode_base64_token(raw: &str) -> Option<String> {
     }
 
     let normalized = trimmed.strip_prefix("b64:").unwrap_or(trimmed);
-    let decoded = general_purpose::STANDARD.decode(normalized).ok()?;
+
+    // If the secret is already a raw GitHub token (set directly rather than
+    // base64-encoded), use it as-is instead of trying to base64-decode it.
+    if looks_like_github_token(normalized) {
+        return Some(normalized.to_string());
+    }
+
+    // Otherwise treat it as base64, tolerating whichever alphabet was used to
+    // produce it (standard vs URL-safe, padded vs not).
+    let decoded = general_purpose::STANDARD
+        .decode(normalized)
+        .or_else(|_| general_purpose::STANDARD_NO_PAD.decode(normalized))
+        .or_else(|_| general_purpose::URL_SAFE.decode(normalized))
+        .or_else(|_| general_purpose::URL_SAFE_NO_PAD.decode(normalized))
+        .ok()?;
     let token = String::from_utf8(decoded).ok()?.trim().to_string();
 
     if token.is_empty() {
