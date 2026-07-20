@@ -334,11 +334,62 @@ fn extract_unavailable_packages(stderr: &str) -> HashSet<String> {
     unavailable
 }
 
+/// Packages that only exist / only make sense on Windows. Installing them on
+/// macOS or Linux always fails (no matching distribution), which used to abort
+/// the whole dependency install. On non-Windows we silently skip them so scripts
+/// that merely guard their Windows-only imports at runtime still work.
+fn is_windows_only_package(pkg: &str) -> bool {
+    if cfg!(target_os = "windows") {
+        return false;
+    }
+
+    let p = pkg
+        .trim()
+        .split(['=', '>', '<', '!', '[', ' ', ';'])
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+
+    matches!(
+        p.as_str(),
+        "pywin32"
+            | "pywin32-ctypes"
+            | "pywinauto"
+            | "wmi"
+            | "comtypes"
+            | "winshell"
+            | "pythoncom"
+            | "pywintypes"
+            | "winreg"
+            | "win32-setctime"
+    ) || p.starts_with("win32")
+}
+
 fn install_packages_resilient(
     python_exec: &PathBuf,
     packages: &[String],
     current_dir: Option<&PathBuf>,
 ) -> Result<(), String> {
+    // Drop Windows-only packages on non-Windows platforms before hitting pip.
+    let skipped_windows: Vec<String> = packages
+        .iter()
+        .filter(|p| is_windows_only_package(p))
+        .cloned()
+        .collect();
+    if !skipped_windows.is_empty() {
+        log::info!(
+            "Skipping Windows-only packages on this platform: {:?}",
+            skipped_windows
+        );
+    }
+    let packages: Vec<String> = packages
+        .iter()
+        .filter(|p| !is_windows_only_package(p))
+        .cloned()
+        .collect();
+    let packages = packages.as_slice();
+
     if packages.is_empty() {
         return Ok(());
     }

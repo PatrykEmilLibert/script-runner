@@ -1399,13 +1399,21 @@ fn commit_and_push_via_libgit2(scripts_path: &Path, commit_msg: &str) -> Result<
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
 
+    // Resolve the destination branch. When HEAD is detached (a broken state some
+    // old clones ended up in), `shorthand()` is "HEAD", which would build the
+    // bogus refspec `refs/heads/HEAD:refs/heads/HEAD` and fail with "src refspec
+    // 'refs/heads/HEAD' does not match any existing object". Only trust a real
+    // branch name; otherwise default to main.
     let branch = repo
         .head()
         .ok()
+        .filter(|head| head.is_branch())
         .and_then(|head| head.shorthand().map(|s| s.to_string()))
         .unwrap_or_else(|| "main".to_string());
 
-    let refspec = format!("refs/heads/{0}:refs/heads/{0}", branch);
+    // Push the current commit (HEAD) to the destination branch. Using HEAD as the
+    // source works whether or not HEAD is attached to a local branch.
+    let refspec = format!("HEAD:refs/heads/{}", branch);
 
     let mut remote = repo
         .find_remote("origin")

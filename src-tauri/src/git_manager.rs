@@ -96,7 +96,14 @@ fn sync_from_git(repo_path: &Path) -> Result<String, String> {
         Ok(repo) => {
             log::info!("Repository found, attempting sync");
 
-            // Step 0: discard the working-tree side effects of local official-
+            // Step 0a: if HEAD is detached (a broken state some old clones ended
+            // up in — e.g. an interrupted rebase), reattach it to main. Otherwise
+            // commits land on a nameless HEAD and the push builds the bogus
+            // refspec `refs/heads/HEAD`, failing with "does not match any
+            // existing object".
+            reattach_detached_head(&repo);
+
+            // Step 0b: discard the working-tree side effects of local official-
             // script encryption BEFORE anything else, so they can never enter a
             // sync commit and permanently diverge this clone from the remote.
             restore_official_encryption_artifacts(&repo, repo_path);
@@ -305,6 +312,36 @@ pub(crate) fn rebase_local_onto(repo: &Repository, onto: git2::Oid) -> Result<()
         .map_err(|e| format!("Failed to finish rebase: {}", e))?;
 
     Ok(())
+}
+
+/// Reattaches a detached HEAD to `main` so commits and pushes target a real
+/// branch. Points `main` at the current commit first, so the working tree is
+/// left untouched (the subsequent fetch/reset brings it to origin/main). A no-op
+/// when HEAD is already on a branch.
+fn reattach_detached_head(repo: &Repository) {
+    match repo.head() {
+        Ok(head) if head.is_branch() => return,
+        Ok(head) => {
+            if let Some(oid) = head.target() {
+                if repo
+                    .reference(
+                        "refs/heads/main",
+                        oid,
+                        true,
+                        "reattach detached HEAD to main",
+                    )
+                    .is_ok()
+                {
+                    if let Err(e) = repo.set_head("refs/heads/main") {
+                        log::warn!("Could not reattach detached HEAD to main: {}", e);
+                    } else {
+                        log::warn!("Reattached detached HEAD to main at {}", oid);
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
 }
 
 /// Discards the working-tree side effects of local official-script encryption
